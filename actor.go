@@ -101,38 +101,41 @@ func (context *ActorContext) loop() {
 }
 
 func main() {
-	latch := make(chan int, 1)
-
-	stage := func(task func()) {
-		_task := func() {
-			task()
-			latch <- 0
-		}
-		go _task()
+	staged := func(task func(fin chan int)) chan int {
+		barrier := make(chan int)
+		go func() {
+			_fin := make(chan int)
+			<-barrier           // waiting start
+			go task(_fin)       // task should handle their finish
+			barrier <- (<-_fin) // waiting for task finishing and report it.
+			close(_fin)
+		}()
+		return barrier
 	}
 
-	stage(func() {
+	st1 := staged(func(ch chan int) {
 		// Ping-Pong
 		ponger := spawn(func(msg Message, self Actor) {
 			fmt.Printf("ponger received: %s\n", msg[1])
 			msg[0].(Actor).send(Message{"Pong"})
 			self.terminate()
 		})
+
 		pinger := spawn(func(msg Message, self Actor) {
 			if msg[0] == "Pong" {
 				fmt.Printf("pinger received: Pong.\nPing-Pong finished.\n")
 				self.terminate()
+				ch <- 0
 			} else {
 				fmt.Printf("pinger sends: Ping\n")
 				ponger.send(Message{self, "Ping"})
 			}
 		})
+
 		pinger.send(Message{"_"})
 	})
 
-	<-latch
-
-	stage(func() {
+	st2 := staged(func(ch chan int) {
 		// Become/Unbecome
 		echo := func(msg Message, self Actor) {
 			fmt.Println(msg[0])
@@ -140,15 +143,28 @@ func main() {
 		echoInUpper := func(msg Message, self Actor) {
 			fmt.Println(strings.ToUpper(msg[0].(string)))
 		}
+		terminate := func(msg Message, self Actor) {
+			self.terminate()
+			ch <- 0
+		}
 		actor := spawn(echo)
 		actor.send(Message{"this should be echoed."})
 		actor.become(echoInUpper, false)
 		actor.send(Message{"this should be echoed in upper case."})
 		actor.unbecome()
 		actor.send(Message{"this should be echoed."})
-		actor.terminate()
+		actor.become(terminate, true)
+		actor.send(Message{})
 	})
 
-	<-latch
-	close(latch)
+	// control stages
+	// start first stage
+	st1 <- 0
+	<-st1
+	close(st1)
+
+	// start second stage
+	st2 <- 0
+	<-st2
+	close(st2)
 }
