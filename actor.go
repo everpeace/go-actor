@@ -1,5 +1,10 @@
 package actor
 
+import (
+	"runtime"
+	"time"
+)
+
 // Types
 type Message []interface{} // Message is just slice (instead of tuple.)
 type Receive func(msg Message, self Actor)
@@ -22,8 +27,9 @@ type Terminate struct{}
 func Spawn(receive Receive) Actor {
 	ActorImpl := ActorImpl{
 		context: &actorContextt{
-			behaviorStack: []Receive{receive},
-			mailbox:       make(chan Message),
+			behaviorStack:  []Receive{receive},
+			mailbox:        make(chan Message),
+			receiveTimeout: time.Duration(10) * time.Millisecond,
 		},
 	}
 	ActorImpl.context.self = &ActorImpl
@@ -51,9 +57,10 @@ func (actor ActorImpl) Terminate() {
 // Actor Context
 // TODO actor hierarchy and supervision (this would introduce actor system)
 type actorContextt struct {
-	self          *ActorImpl
-	behaviorStack []Receive
-	mailbox       chan Message
+	self           *ActorImpl
+	behaviorStack  []Receive
+	mailbox        chan Message
+	receiveTimeout time.Duration
 }
 
 func (context *actorContextt) closeAll() {
@@ -62,14 +69,18 @@ func (context *actorContextt) closeAll() {
 
 // Actor's main process
 func (context *actorContextt) loop() {
-	for {
+	defer context.closeAll()
+	forever(context.processOneMessage())
+}
+
+func (context *actorContextt) processOneMessage() func() bool {
+	return func() bool {
 		select {
 		case msg := <-context.mailbox:
 			if len(msg) == 0 {
 				context.behaviorStack[len(context.behaviorStack)-1](msg, context.self)
 			} else if _, ok := msg[0].(Terminate); ok {
-				context.closeAll()
-				return
+				return true
 			} else if become, ok := msg[0].(Become); ok {
 				if become.discardOld {
 					l := len(context.behaviorStack)
@@ -88,6 +99,20 @@ func (context *actorContextt) loop() {
 			} else {
 				context.behaviorStack[len(context.behaviorStack)-1](msg, context.self)
 			}
+		case <-time.After(context.receiveTimeout):
+			// timeout
 		}
+		return false
+	}
+}
+
+func forever(fun func() bool) {
+	for {
+		// if fun() returns true, forever ends.
+		if fun() {
+			break
+		}
+		// force give back control to goroutine scheduler.
+		runtime.Gosched()
 	}
 }
