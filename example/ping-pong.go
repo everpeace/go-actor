@@ -14,7 +14,7 @@ func main() {
 		self.Terminate()
 	}
 	ping := func(_ponger actor.Actor) func(msg actor.Message, self actor.Actor) {
-		func(msg actor.Message, self actor.Actor) {
+		return func(msg actor.Message, self actor.Actor) {
 			if msg[0] == "Pong" {
 				fmt.Printf("pinger received: Pong.\nPing-Pong finished.\n")
 				self.Terminate()
