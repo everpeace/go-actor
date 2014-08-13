@@ -26,7 +26,7 @@ type Terminate struct{}
 // actor starter
 func Spawn(receive Receive) Actor {
 	ActorImpl := ActorImpl{
-		context: &actorContextt{
+		context: &actorContext{
 			behaviorStack:  []Receive{receive},
 			mailbox:        make(chan Message),
 			receiveTimeout: time.Duration(10) * time.Millisecond,
@@ -38,7 +38,7 @@ func Spawn(receive Receive) Actor {
 }
 
 type ActorImpl struct {
-	context *actorContextt
+	context *actorContext
 }
 
 func (actor ActorImpl) Send(msg Message) {
@@ -56,24 +56,24 @@ func (actor ActorImpl) Terminate() {
 
 // Actor Context
 // TODO actor hierarchy and supervision (this would introduce actor system)
-type actorContextt struct {
+type actorContext struct {
 	self           *ActorImpl
 	behaviorStack  []Receive
 	mailbox        chan Message
 	receiveTimeout time.Duration
 }
 
-func (context *actorContextt) closeAll() {
+func (context *actorContext) closeAll() {
 	close(context.mailbox)
 }
 
 // Actor's main process
-func (context *actorContextt) loop() {
+func (context *actorContext) loop() {
 	defer context.closeAll()
 	forever(context.processOneMessage())
 }
 
-func (context *actorContextt) processOneMessage() func() bool {
+func (context *actorContext) processOneMessage() func() bool {
 	return func() bool {
 		select {
 		case msg := <-context.mailbox:
