@@ -1,7 +1,6 @@
 package actor
 
 import (
-	"runtime"
 	"time"
 )
 
@@ -13,6 +12,8 @@ type Actor interface {
 	Become(behavior Receive, discardOld bool)
 	Unbecome()
 	Terminate()
+	// child actor starter
+	Spawn(receive Receive) Actor
 }
 
 // Special Messages
@@ -23,44 +24,52 @@ type Become struct {
 type UnBecome struct{}
 type Terminate struct{}
 
-// actor starter
+// orphan actor starter
 func Spawn(receive Receive) Actor {
-	ActorImpl := ActorImpl{
-		context: &actorContext{
-			behaviorStack:  []Receive{receive},
-			mailbox:        make(chan Message),
-			receiveTimeout: time.Duration(10) * time.Millisecond,
-		},
-	}
-	ActorImpl.context.self = &ActorImpl
-	go ActorImpl.context.loop()
-	return ActorImpl
+	return spawn(nil, receive)
 }
 
 type ActorImpl struct {
 	context *actorContext
 }
 
-func (actor ActorImpl) Send(msg Message) {
+func (actor *ActorImpl) Send(msg Message) {
 	go func() { actor.context.mailbox <- msg }()
 }
-func (actor ActorImpl) Become(behavior Receive, discardOld bool) {
+func (actor *ActorImpl) Become(behavior Receive, discardOld bool) {
 	go func() { actor.context.mailbox <- Message{Become{newBehavior: behavior, discardOld: discardOld}} }()
 }
-func (actor ActorImpl) Unbecome() {
+func (actor *ActorImpl) Unbecome() {
 	go func() { actor.context.mailbox <- Message{UnBecome{}} }()
 }
-func (actor ActorImpl) Terminate() {
+func (actor *ActorImpl) Terminate() {
 	go func() { actor.context.mailbox <- Message{Terminate{}} }()
+}
+func (actor *ActorImpl) Spawn(receive Receive) Actor {
+	spawnedActor := spawn(actor, receive)
+	actor.context.children = append(actor.context.children, actor)
+	return spawnedActor
 }
 
 // Actor Context
 // TODO actor hierarchy and supervision (this would introduce actor system)
 type actorContext struct {
+	parent         *ActorImpl
 	self           *ActorImpl
+	children       []*ActorImpl
 	behaviorStack  []Receive
 	mailbox        chan Message
 	receiveTimeout time.Duration
+}
+
+func newActorContext(parent *ActorImpl, receive Receive) *actorContext {
+	return &actorContext{
+		parent:         parent,
+		children:       make([]*ActorImpl, 0, 100),
+		behaviorStack:  []Receive{receive},
+		mailbox:        make(chan Message),
+		receiveTimeout: time.Duration(10) * time.Millisecond,
+	}
 }
 
 func (context *actorContext) closeAll() {
@@ -106,13 +115,11 @@ func (context *actorContext) processOneMessage() func() bool {
 	}
 }
 
-func forever(fun func() bool) {
-	for {
-		// if fun() returns true, forever ends.
-		if fun() {
-			break
-		}
-		// force give back control to goroutine scheduler.
-		runtime.Gosched()
+func spawn(parent *ActorImpl, receive Receive) *ActorImpl {
+	actor := &ActorImpl{
+		context: newActorContext(parent, receive),
 	}
+	actor.context.self = actor
+	go actor.context.loop()
+	return actor
 }
