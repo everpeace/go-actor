@@ -8,20 +8,20 @@ import (
 
 func main() {
 	latch := make(chan int)
-	pong := func(msg actor.Message, self actor.Actor) {
+	pong := func(msg actor.Message, context actor.ActorContext) {
 		fmt.Printf("ponger received: %s\n", msg[1])
 		msg[0].(actor.Actor).Send(actor.Message{"Pong"})
-		self.Terminate()
+		context.Self().Terminate()
 	}
-	ping := func(_ponger actor.Actor) func(msg actor.Message, self actor.Actor) {
-		return func(msg actor.Message, self actor.Actor) {
+	ping := func(_ponger actor.Actor) actor.Receive {
+		return func(msg actor.Message, context actor.ActorContext) {
 			if msg[0] == "Pong" {
 				fmt.Printf("pinger received: Pong.\nPing-Pong finished.\n")
-				self.Terminate()
+				context.Self().Terminate()
 				latch <- 0
 			} else {
 				fmt.Printf("pinger sends: Ping\n")
-				_ponger.Send(actor.Message{self, "Ping"})
+				_ponger.Send(actor.Message{context.Self(), "Ping"})
 			}
 		}
 	}
