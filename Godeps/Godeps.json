@@ -1,0 +1,15 @@
+{
+	"ImportPath": "github.com/everpeace/go-actor",
+	"GoVersion": "go1.3",
+	"Deps": [
+		{
+			"ImportPath": "code.google.com/p/go-uuid/uuid",
+			"Comment": "null-12",
+			"Rev": "7dda39b2e7d5e265014674c5af696ba4186679e9"
+		},
+		{
+			"ImportPath": "github.com/dropbox/godropbox/container/set",
+			"Rev": "f03712fb7f8a1c7440ec36501cd8ede33101ef7a"
+		}
+	]
+}
