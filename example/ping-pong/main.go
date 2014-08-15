@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/everpeace/go-actor"
+	actor "github.com/everpeace/go-actor"
 )
 
 func main() {

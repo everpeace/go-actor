@@ -9,13 +9,15 @@ import (
 // TODO actor hierarchy and supervision (this would introduce actor system)
 type actorContext struct {
 	self             *actorImpl
-	monitors         map[string]*actorImpl
+	monitor          ForwardingActor
 	originalBehavior Receive
 	currentBehavior  Receive
 	behaviorStack    []Receive
 	mailbox          chan Message
 	killChan         chan kill
 	terminateChan    chan terminate
+	attachMonChan    chan Actor
+	detachMonChan    chan Actor
 	receiveTimeout   time.Duration
 }
 
@@ -57,6 +59,8 @@ func newActorContext(receive Receive) *actorContext {
 		currentBehavior:  receive,
 		behaviorStack:    []Receive{receive},
 		mailbox:          make(chan Message, 100),
+		attachMonChan:    make(chan Actor, 100),
+		detachMonChan:    make(chan Actor, 100),
 		// buffer size for control message is 1 (cotrol method would block)
 		terminateChan:  make(chan terminate),
 		killChan:       make(chan kill),
@@ -87,16 +91,36 @@ func (context *actorContext) start() chan bool {
 	return startLatch
 }
 
+func (context *actorContext) attachMonitor(mon Actor) {
+	context.attachMonChan <- mon
+}
+
+func (context *actorContext) detachMonitor(mon Actor) {
+	context.detachMonChan <- mon
+}
+
 // Actor's main loop which is executed in go routine
 func (context *actorContext) loop() {
 	defer context.closeAll()
+	// TODO how monitor detect STARTED??
+	// now monitor can't detect STARTED.
+	// context.notifyMonitors(Message{STARTED})
 	for {
 		// TODO log
 		select {
 		case <-context.killChan:
+			context.notifyMonitors(Message{KILLED})
 			break
 		case <-context.terminateChan:
+			context.notifyMonitors(Message{TERMINATED})
 			break
+		case mon := <-context.attachMonChan:
+			if context.monitor == nil {
+				context.monitor = SpawnForwardActor(context.Self().Name()+"-MonitorsForwarder")
+			}
+			context.monitor.Add(mon)
+		case mon := <-context.detachMonChan:
+			context.monitor.Remove(mon)
 		default:
 			context.processOneMessage()
 		}
@@ -112,5 +136,13 @@ func (context *actorContext) processOneMessage() {
 	case <-time.After(context.receiveTimeout):
 		// TODO log
 		// timeout
+	}
+}
+
+func (context *actorContext) notifyMonitors(msg Message){
+	if context.monitor != nil {
+		context.monitor.Send(msg)
+	} else {
+		//TODO log
 	}
 }

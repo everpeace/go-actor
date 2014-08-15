@@ -1,6 +1,6 @@
 package actor
 
-import "gopkg.in/fatih/set.v0"
+import "github.com/dropbox/godropbox/container/set"
 
 type forwardingActor struct {
 	*actorImpl
@@ -14,16 +14,12 @@ type removeRecipient struct {
 	recipient Actor
 }
 
-func SpawnForwardActor(recipients ...Actor) ForwardingActor {
-	recipientSet := set.New()
-	for _, recipient := range recipients {
-		recipientSet.Add(recipient)
-	}
+func SpawnForwardActor(name string) ForwardingActor {
 	forwardActor := &forwardingActor{
-		newActorImpl(forward(recipientSet)),
+		newActorImplWithName(name, forward(set.NewSet())),
 	}
-	latch := forwardActor.context.start()
-	latch <- true
+	start := forwardActor.context.start()
+	start <- true
 	return forwardActor
 }
 
@@ -43,20 +39,20 @@ func (actor *forwardingActor) Remove(recipient Actor) {
 	}()
 }
 
-func forward(actors *set.Set) Receive {
-	return func(msg Message, context ActorContext) {
+func forward(recipients set.Set) Receive {
+	return func(msg Message, _ ActorContext) {
 		if len(msg) == 0 {
-			for _, actor := range actors.List() {
+			for actor := range recipients.Iter() {
 				if a, ok := actor.(Actor); ok {
 					a.Send(msg)
 				}
 			}
-		} else if recipient, ok := msg[0].(addRecipient); ok {
-			actors.Add(recipient)
-		} else if recipient, ok := msg[0].(removeRecipient); ok {
-			actors.Remove(recipient)
+		} else if m, ok := msg[0].(addRecipient); ok {
+			recipients.Add(m.recipient)
+		} else if m, ok := msg[0].(removeRecipient); ok {
+			recipients.Remove(m.recipient)
 		} else {
-			for _, actor := range actors.List() {
+			for actor := range recipients.Iter() {
 				if a, ok := actor.(Actor); ok {
 					a.Send(msg)
 				}

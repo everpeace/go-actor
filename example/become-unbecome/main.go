@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/everpeace/go-actor"
+	actor "github.com/everpeace/go-actor"
 )
 
 func main() {
