@@ -1,33 +1,31 @@
 package actor
 
-import "code.google.com/p/go-uuid/uuid"
+import (
+	"code.google.com/p/go-uuid/uuid"
+	"fmt"
+)
 
 // actor starter
 func Spawn(receive Receive) Actor {
-	actor := newActorImpl(receive)
-	startLatch := actor.context.start()
+	startLatch, actor := spawn(nil, uuid.New(), receive)
 	startLatch <- true
 	return actor
 }
 
 func SpawnWithName(name string, receive Receive) Actor {
-	actor := newActorImplWithName(name, receive)
-	startLatch := actor.context.start()
+	startLatch, actor := spawn(nil, name, receive)
 	startLatch <- true
 	return actor
 }
 
 func SpawnWithLatch(receive Receive) (chan bool, Actor) {
-	actor := newActorImpl(receive)
-	startLatch := actor.context.start()
-	return startLatch, actor
+	return spawn(nil, uuid.New(), receive)
 }
 
 func SpawnWithNameAndLatch(name string, receive Receive) (chan bool, Actor) {
-	actor := newActorImplWithName(name, receive)
-	startLatch := actor.context.start()
-	return startLatch, actor
+	return 	spawn(nil, name, receive)
 }
+
 type actorImpl struct {
 	name    string
 	context *actorContext
@@ -52,15 +50,35 @@ func (actor *actorImpl) Kill() {
 }
 
 func (actor *actorImpl) Monitor(mon Actor) {
-	go func() {
-		actor.context.attachMonitor(mon)
-	}()
+	actor.context.attachMonitor(mon)
 }
 
 func (actor *actorImpl) Demonitor(mon Actor) {
-	go func() {
-		actor.context.detachMonitor(mon)
-	}()
+	actor.context.detachMonitor(mon)
+}
+
+func (actor *actorImpl) Spawn(receive Receive) Actor{
+	child_name := actor.Name()+"/"+fmt.Sprint(len(actor.context.children))
+	latch, child := spawn(actor,child_name,receive)
+	latch <- true
+	return child
+}
+
+func (actor *actorImpl) SpawnWithName(name string, receive Receive) Actor{
+	latch, child := spawn(actor, actor.Name()+"/"+name, receive)
+	latch <- true
+	return child
+}
+
+func (actor *actorImpl) SpawnWithLatch(receive Receive) (chan bool, Actor){
+	child_name := actor.Name()+"/"+string(len(actor.context.children))
+	latch, child := spawn(actor,child_name,receive)
+	return latch, child
+}
+
+func (actor *actorImpl) SpawnWithNameAndLatch(name string, receive Receive) (chan bool, Actor){
+	latch, child := spawn(actor, actor.Name()+"/"+name, receive)
+	return latch, child
 }
 
 func (actor *actorImpl) Name() string{
@@ -68,18 +86,26 @@ func (actor *actorImpl) Name() string{
 }
 
 // private constructors
-func newActorImpl(receive Receive) *actorImpl {
-	return &actorImpl{
-		name:    uuid.New(),
-		context: newActorContext(receive),
+func newActorImpl(parent *actorImpl, name string, receive Receive) *actorImpl {
+	if parent == nil {
+		actor := &actorImpl{
+			name:    name,
+			context: newActorContext(nil, receive),
+		}
+		actor.context.self = actor
+		return actor
+	} else {
+		actor := &actorImpl{
+			name:    name,
+			context: newActorContext(parent.context, receive),
+		}
+		actor.context.self = actor
+		return actor
 	}
 }
 
-func newActorImplWithName(name string, receive Receive) *actorImpl {
-	actor := &actorImpl{
-		name:    name,
-		context: newActorContext(receive),
-	}
-	actor.context.self = actor
-	return actor
+func spawn(parent *actorImpl, name string, receive Receive) (chan bool, Actor){
+	actor := newActorImpl(parent, name, receive)
+	startLatch := actor.context.start()
+	return startLatch, actor
 }

@@ -8,7 +8,9 @@ import (
 // Actor Context
 // TODO actor hierarchy and supervision (this would introduce actor system)
 type actorContext struct {
+	parent           *actorContext
 	self             *actorImpl
+	children         []*actorContext
 	monitor          ForwardingActor
 	originalBehavior Receive
 	currentBehavior  Receive
@@ -18,6 +20,7 @@ type actorContext struct {
 	terminateChan    chan terminate
 	attachMonChan    chan Actor
 	detachMonChan    chan Actor
+	addChildChan     chan *actorContext
 	receiveTimeout   time.Duration
 }
 
@@ -52,23 +55,30 @@ func (context *actorContext) Unbecome() {
 }
 
 // constructor
-func newActorContext(receive Receive) *actorContext {
+func newActorContext(parent *actorContext, receive Receive) *actorContext {
 	// TODO make parameters configurable
-	return &actorContext{
+	self :=  &actorContext{
+		parent:           parent,
+		children:         make([]*actorContext,0,100),
 		originalBehavior: receive,
 		currentBehavior:  receive,
 		behaviorStack:    []Receive{receive},
 		mailbox:          make(chan Message, 100),
-		attachMonChan:    make(chan Actor, 100),
-		detachMonChan:    make(chan Actor, 100),
 		// buffer size for control message is 1 (cotrol method would block)
-		terminateChan:  make(chan terminate),
-		killChan:       make(chan kill),
-		receiveTimeout: time.Duration(10) * time.Millisecond,
+		attachMonChan:    make(chan Actor),
+		detachMonChan:    make(chan Actor),
+		terminateChan:    make(chan terminate),
+		killChan:         make(chan kill),
+		addChildChan:     make(chan *actorContext),
+		receiveTimeout:   time.Duration(10) * time.Millisecond,
 	}
+	if parent != nil {
+		parent.addChildChan <- self
+	}
+	return self
 }
 
-func (context *actorContext) closeAll() {
+func (context *actorContext) closeAllChan() {
 	// TODO deadletter channel??
 	close(context.mailbox)
 	close(context.terminateChan)
@@ -84,6 +94,7 @@ func (context *actorContext) restart() {
 func (context *actorContext) start() chan bool {
 	startLatch := make(chan bool)
 	go func() {
+		defer context.closeAllChan()
 		<-startLatch
 		close(startLatch)
 		context.loop()
@@ -100,8 +111,7 @@ func (context *actorContext) detachMonitor(mon Actor) {
 }
 
 // Actor's main loop which is executed in go routine
-func (context *actorContext) loop() {
-	defer context.closeAll()
+func (context *actorContext) loop() []interface{}{
 	// TODO how monitor detect STARTED??
 	// now monitor can't detect STARTED.
 	// context.notifyMonitors(Message{STARTED})
@@ -109,10 +119,22 @@ func (context *actorContext) loop() {
 		// TODO log
 		select {
 		case <-context.killChan:
-			context.notifyMonitors(Message{KILLED})
+			context.notifyMonitors(Message{Down{
+				Cause: "killed",
+				Actor: context.Self(),
+			}})
+			if context.parent != nil {
+				context.parent.killChan <- kill{}
+			}
 			break
 		case <-context.terminateChan:
-			context.notifyMonitors(Message{TERMINATED})
+			context.notifyMonitors(Message{Down{
+				Cause: "terminated",
+				Actor: context.Self(),
+			}})
+			if context.parent != nil {
+				context.parent.terminateChan <- terminate{}
+			}
 			break
 		case mon := <-context.attachMonChan:
 			if context.monitor == nil {
@@ -121,6 +143,8 @@ func (context *actorContext) loop() {
 			context.monitor.Add(mon)
 		case mon := <-context.detachMonChan:
 			context.monitor.Remove(mon)
+		case child := <-context.addChildChan:
+			context.children = append(context.children, child)
 		default:
 			context.processOneMessage()
 		}

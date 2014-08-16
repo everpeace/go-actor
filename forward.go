@@ -16,7 +16,7 @@ type removeRecipient struct {
 
 func SpawnForwardActor(name string) ForwardingActor {
 	forwardActor := &forwardingActor{
-		newActorImplWithName(name, forward(set.NewSet())),
+		newActorImpl(nil, name, forward(set.NewSet())),
 	}
 	start := forwardActor.context.start()
 	start <- true
