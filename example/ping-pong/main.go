@@ -7,28 +7,36 @@ import (
 )
 
 func main() {
-	latch := make(chan int)
+	fmt.Println("==========================================================")
+	fmt.Println("== Ping-Pong example.")
+
+	// The latch is to ensure the completion of all examples' execution.
+	latch := make(chan bool)
+
+	system := actor.NewActorSystem("ping-pong")
 	pong := func(msg actor.Message, context actor.ActorContext) {
-		fmt.Printf("ponger received: %s\n", msg[1])
+		fmt.Printf("%s received: %s\n", context.Self().Name(), msg[1])
+		fmt.Printf("%s sends : Pong\n", context.Self().Name())
 		msg[0].(actor.Actor).Send(actor.Message{"Pong"})
-		context.Self().Terminate()
+		latch <- true
 	}
 	ping := func(_ponger actor.Actor) actor.Receive {
 		return func(msg actor.Message, context actor.ActorContext) {
 			if msg[0] == "Pong" {
-				fmt.Printf("pinger received: Pong.\nPing-Pong finished.\n")
-				context.Self().Terminate()
-				latch <- 0
+				fmt.Printf("%s receives: Pong.\nPing-Pong finished.\n", context.Self().Name())
 			} else {
-				fmt.Printf("pinger sends: Ping\n")
+				fmt.Printf("%s sends : Ping\n", context.Self().Name())
 				_ponger.Send(actor.Message{context.Self(), "Ping"})
 			}
 		}
 	}
 
-	ponger := actor.Spawn(pong)
-	pinger := actor.Spawn(ping(ponger))
+	ponger := system.SpawnWithName("ponger", pong)
+	pinger := system.SpawnWithName("pinger", ping(ponger))
 	pinger.Send(actor.Message{"_"})
 
 	<-latch
+
+	system.Shutdown()
+	fmt.Println("==========================================================")
 }

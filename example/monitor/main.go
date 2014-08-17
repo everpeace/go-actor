@@ -2,28 +2,44 @@ package main
 
 import (
 	"fmt"
+	"time"
 
 	actor "github.com/everpeace/go-actor"
 )
 func main() {
-	exitLatch := make(chan bool)
-	echo := func(exit chan bool) actor.Receive {
+	fmt.Println("==========================================================")
+	fmt.Println("== Monitor example")
+	fmt.Println("== Monitor can detect actor's termination.")
+	fmt.Println("== In this example, spawn \"traget\" actor and it is monitored")
+	fmt.Println("== by \"monitor\" ")
+
+	// The latch is to ensure the completion of all examples' execution.
+	latch := make(chan bool)
+
+	system := actor.NewActorSystem("monitor-system")
+	echo := func() actor.Receive {
 		return func(msg actor.Message, context actor.ActorContext) {
-			fmt.Printf("%s receive: %s\n", context.Self().Name(), msg[0])
-			exit <- true
+			if m , ok := msg[0].(actor.Down); ok {
+				fmt.Printf("%s detects: %s %s\n", context.Self().Name(), m.Actor.Name(), m.Cause)
+				latch <- true
+			} else {
+				fmt.Printf("%s receive: %s\n", context.Self().Name(), msg)
+			}
 		}
 	}
 
-	mon := actor.SpawnWithName("monitor", echo(exitLatch))
-	targetStart, target := actor.SpawnWithNameAndLatch("target", echo(exitLatch))
+	monitor := system.SpawnWithName("monitor", echo())
+	target := system.SpawnWithName("target", echo())
+	target.Monitor(monitor)
 
-	target.Monitor(mon)
+	<- time.After(time.Duration(1)*time.Second)
 
 	target.Send(actor.Message{"hello"})
-	targetStart <- true
-
 	target.Terminate()
-	mon.Terminate()
-	<-exitLatch
-	<-exitLatch
+
+	<-latch
+
+	// Shutdown method shutdown all actors.
+	system.Shutdown()
+	fmt.Println("==========================================================")
 }

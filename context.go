@@ -3,14 +3,17 @@ package actor
 import (
 	"runtime"
 	"time"
+
+	"github.com/dropbox/godropbox/container/set"
 )
 
 // Actor Context
 // TODO actor hierarchy and supervision (this would introduce actor system)
 type actorContext struct {
+	system           *actorSystem
 	parent           *actorContext
 	self             *actorImpl
-	children         []*actorContext
+	children         set.Set
 	monitor          ForwardingActor
 	originalBehavior Receive
 	currentBehavior  Receive
@@ -21,12 +24,14 @@ type actorContext struct {
 	attachMonChan    chan Actor
 	detachMonChan    chan Actor
 	addChildChan     chan *actorContext
+	shutdownChan     chan shutdown
 	receiveTimeout   time.Duration
 }
 
 // internal Messages accepted by actorContext
 type terminate struct{}
 type kill struct{}
+type shutdown struct{}
 
 // ActorContext Interfaces
 func (context *actorContext) Self() Actor {
@@ -55,11 +60,12 @@ func (context *actorContext) Unbecome() {
 }
 
 // constructor
-func newActorContext(parent *actorContext, receive Receive) *actorContext {
+func newTopLevelActorContext(system *actorSystem, self *actorImpl, receive Receive) *actorContext {
 	// TODO make parameters configurable
-	self :=  &actorContext{
-		parent:           parent,
-		children:         make([]*actorContext,0,100),
+	return &actorContext{
+		system:           system,
+		self:             self,
+		children:         set.NewSet(),
 		originalBehavior: receive,
 		currentBehavior:  receive,
 		behaviorStack:    []Receive{receive},
@@ -70,31 +76,56 @@ func newActorContext(parent *actorContext, receive Receive) *actorContext {
 		terminateChan:    make(chan terminate),
 		killChan:         make(chan kill),
 		addChildChan:     make(chan *actorContext),
+		shutdownChan:     make(chan shutdown),
 		receiveTimeout:   time.Duration(10) * time.Millisecond,
 	}
-	if parent != nil {
-		parent.addChildChan <- self
+}
+
+func newActorContext(parent *actorContext, self *actorImpl, receive Receive) *actorContext {
+	// TODO make parameters configurable
+	context :=  &actorContext{
+		system:           parent.system,
+		parent:           parent,
+		self:             self,
+		children:         set.NewSet(),
+		originalBehavior: receive,
+		currentBehavior:  receive,
+		behaviorStack:    []Receive{receive},
+		mailbox:          make(chan Message, 100),
+		// buffer size for control message is 1 (cotrol method would block)
+		attachMonChan:    make(chan Actor),
+		detachMonChan:    make(chan Actor),
+		terminateChan:    make(chan terminate),
+		killChan:         make(chan kill),
+		addChildChan:     make(chan *actorContext),
+		shutdownChan:     make(chan shutdown),
+		receiveTimeout:   time.Duration(10) * time.Millisecond,
 	}
-	return self
+	parent.addChildChan <- context
+	return context
 }
 
 func (context *actorContext) closeAllChan() {
-	// TODO deadletter channel??
-	close(context.mailbox)
-	close(context.terminateChan)
-	close(context.killChan)
-}
-
-func (context *actorContext) restart() {
-	// force restart
-	context.killChan <- kill{}
-	context.start()
+	// TODO flush remained message to deadletter channel??
+	go func() {
+		defer logPanic(context.self)
+		close(context.mailbox)
+		close(context.terminateChan)
+		close(context.killChan)
+	}()
 }
 
 func (context *actorContext) start() chan bool {
 	startLatch := make(chan bool)
+	context.system.wg.Add(1)
 	go func() {
-		defer context.closeAllChan()
+		defer func(){
+			context.system.running.Remove(context.Self())
+			context.system.stopped.Add(context.Self())
+			context.system.wg.Done()
+			context.closeAllChan()
+		}()
+		context.system.running.Add(context.Self())
 		<-startLatch
 		close(startLatch)
 		context.loop()
@@ -110,8 +141,21 @@ func (context *actorContext) detachMonitor(mon Actor) {
 	context.detachMonChan <- mon
 }
 
+func (context *actorContext) kill() {
+	context.killChan <- kill{}
+}
+
+func (context *actorContext) terminate() {
+	context.terminateChan <- terminate{}
+}
+
+func (context *actorContext) shutdown() {
+	context.shutdownChan <- shutdown{}
+}
+
+
 // Actor's main loop which is executed in go routine
-func (context *actorContext) loop() []interface{}{
+func (context *actorContext) loop() {
 	// TODO how monitor detect STARTED??
 	// now monitor can't detect STARTED.
 	// context.notifyMonitors(Message{STARTED})
@@ -124,27 +168,38 @@ func (context *actorContext) loop() []interface{}{
 				Actor: context.Self(),
 			}})
 			if context.parent != nil {
-				context.parent.killChan <- kill{}
+				context.parent.kill()
 			}
-			break
+			return
 		case <-context.terminateChan:
 			context.notifyMonitors(Message{Down{
 				Cause: "terminated",
 				Actor: context.Self(),
 			}})
 			if context.parent != nil {
-				context.parent.terminateChan <- terminate{}
+				context.parent.terminate()
 			}
-			break
+			return
 		case mon := <-context.attachMonChan:
 			if context.monitor == nil {
-				context.monitor = SpawnForwardActor(context.Self().Name()+"-MonitorsForwarder")
+				context.monitor = context.system.spawnMonitorForwarderFor(context.self)
 			}
 			context.monitor.Add(mon)
 		case mon := <-context.detachMonChan:
 			context.monitor.Remove(mon)
 		case child := <-context.addChildChan:
-			context.children = append(context.children, child)
+			context.children.Add(child)
+		case <-context.shutdownChan:
+			for child := range context.children.Iter() {
+				if childContext, ok := child.(*actorContext); ok {
+					childContext.shutdown()
+				}
+			}
+			context.notifyMonitors(Message{Down{
+				Cause: "shutdowned",
+				Actor: context.Self(),
+			}})
+			return
 		default:
 			context.processOneMessage()
 		}

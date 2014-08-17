@@ -5,17 +5,22 @@ type Message []interface{} // Message is just slice (instead of tuple.)
 
 type Receive func(msg Message, context ActorContext)
 
+type ActorSystem interface{
+	actorFactory
+	Name()
+	WaitForAllActorsStopped()
+	Shutdown()
+}
+
 type Actor interface {
+	actorFactory
 	Name() string
 	Send(msg Message)
 	Terminate()
 	Kill()
+	Shutdown()
 	Monitor(actor Actor)
 	Demonitor(actor Actor)
-	Spawn(receive Receive) Actor
-	SpawnWithName(name string, receive Receive) Actor
-	SpawnWithLatch(receive Receive) (chan bool, Actor)
-	SpawnWithNameAndLatch(name string, receive Receive) (chan bool, Actor)
 	// Restart()
 }
 
@@ -35,4 +40,12 @@ type ActorContext interface {
 type Down struct {
 	Cause string
 	Actor  Actor
+}
+
+type actorFactory interface{
+	Spawn(receive Receive) Actor
+	SpawnWithName(name string, receive Receive) Actor
+	SpawnWithLatch(receive Receive) (chan bool, Actor)
+	SpawnWithNameAndLatch(name string, receive Receive) (chan bool, Actor)
+	SpawnForwardActor(name string, actors...Actor) ForwardingActor
 }

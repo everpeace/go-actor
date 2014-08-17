@@ -14,14 +14,6 @@ type removeRecipient struct {
 	recipient Actor
 }
 
-func SpawnForwardActor(name string) ForwardingActor {
-	forwardActor := &forwardingActor{
-		newActorImpl(nil, name, forward(set.NewSet())),
-	}
-	start := forwardActor.context.start()
-	start <- true
-	return forwardActor
-}
 
 func (actor *forwardingActor) Add(recipient Actor) {
 	go func() {
@@ -40,7 +32,7 @@ func (actor *forwardingActor) Remove(recipient Actor) {
 }
 
 func forward(recipients set.Set) Receive {
-	return func(msg Message, _ ActorContext) {
+	return func(msg Message, context ActorContext) {
 		if len(msg) == 0 {
 			for actor := range recipients.Iter() {
 				if a, ok := actor.(Actor); ok {
