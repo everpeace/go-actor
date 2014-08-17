@@ -14,7 +14,6 @@ type removeRecipient struct {
 	recipient Actor
 }
 
-
 func (actor *forwardingActor) Add(recipient Actor) {
 	go func() {
 		actor.context.Self().Send(Message{addRecipient{

@@ -71,19 +71,19 @@ func newTopLevelActorContext(system *actorSystem, self *actorImpl, receive Recei
 		behaviorStack:    []Receive{receive},
 		mailbox:          make(chan Message, 100),
 		// buffer size for control message is 1 (cotrol method would block)
-		attachMonChan:    make(chan Actor),
-		detachMonChan:    make(chan Actor),
-		terminateChan:    make(chan terminate),
-		killChan:         make(chan kill),
-		addChildChan:     make(chan *actorContext),
-		shutdownChan:     make(chan shutdown),
-		receiveTimeout:   time.Duration(10) * time.Millisecond,
+		attachMonChan:  make(chan Actor),
+		detachMonChan:  make(chan Actor),
+		terminateChan:  make(chan terminate),
+		killChan:       make(chan kill),
+		addChildChan:   make(chan *actorContext),
+		shutdownChan:   make(chan shutdown),
+		receiveTimeout: time.Duration(10) * time.Millisecond,
 	}
 }
 
 func newActorContext(parent *actorContext, self *actorImpl, receive Receive) *actorContext {
 	// TODO make parameters configurable
-	context :=  &actorContext{
+	context := &actorContext{
 		system:           parent.system,
 		parent:           parent,
 		self:             self,
@@ -93,13 +93,13 @@ func newActorContext(parent *actorContext, self *actorImpl, receive Receive) *ac
 		behaviorStack:    []Receive{receive},
 		mailbox:          make(chan Message, 100),
 		// buffer size for control message is 1 (cotrol method would block)
-		attachMonChan:    make(chan Actor),
-		detachMonChan:    make(chan Actor),
-		terminateChan:    make(chan terminate),
-		killChan:         make(chan kill),
-		addChildChan:     make(chan *actorContext),
-		shutdownChan:     make(chan shutdown),
-		receiveTimeout:   time.Duration(10) * time.Millisecond,
+		attachMonChan:  make(chan Actor),
+		detachMonChan:  make(chan Actor),
+		terminateChan:  make(chan terminate),
+		killChan:       make(chan kill),
+		addChildChan:   make(chan *actorContext),
+		shutdownChan:   make(chan shutdown),
+		receiveTimeout: time.Duration(10) * time.Millisecond,
 	}
 	parent.addChildChan <- context
 	return context
@@ -119,9 +119,7 @@ func (context *actorContext) start() chan bool {
 	startLatch := make(chan bool)
 	context.system.wg.Add(1)
 	go func() {
-		defer func(){
-			context.system.running.Remove(context.Self())
-			context.system.stopped.Add(context.Self())
+		defer func() {
 			context.system.wg.Done()
 			context.closeAllChan()
 		}()
@@ -152,7 +150,6 @@ func (context *actorContext) terminate() {
 func (context *actorContext) shutdown() {
 	context.shutdownChan <- shutdown{}
 }
-
 
 // Actor's main loop which is executed in go routine
 func (context *actorContext) loop() {
@@ -218,7 +215,7 @@ func (context *actorContext) processOneMessage() {
 	}
 }
 
-func (context *actorContext) notifyMonitors(msg Message){
+func (context *actorContext) notifyMonitors(msg Message) {
 	if context.monitor != nil {
 		context.monitor.Send(msg)
 	} else {

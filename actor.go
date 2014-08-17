@@ -21,6 +21,7 @@ func (actor *actorImpl) Send(msg Message) {
 
 func (actor *actorImpl) Terminate() {
 	actor.context.system.running.Remove(actor)
+	actor.context.system.stopped.Add(actor)
 	go func() {
 		defer logPanic(actor)
 		actor.context.terminate()
@@ -29,6 +30,7 @@ func (actor *actorImpl) Terminate() {
 
 func (actor *actorImpl) Kill() {
 	actor.context.system.running.Remove(actor)
+	actor.context.system.stopped.Add(actor)
 	go func() {
 		defer logPanic(actor)
 		actor.context.kill()
@@ -37,6 +39,7 @@ func (actor *actorImpl) Kill() {
 
 func (actor *actorImpl) Shutdown() {
 	actor.context.system.running.Remove(actor)
+	actor.context.system.stopped.Add(actor)
 	go func() {
 		defer logPanic(actor)
 		actor.context.shutdown()
@@ -57,33 +60,33 @@ func (actor *actorImpl) Demonitor(mon Actor) {
 	}()
 }
 
-func (actor *actorImpl) Spawn(receive Receive) Actor{
+func (actor *actorImpl) Spawn(receive Receive) Actor {
 	system := actor.context.system
 	latch, child := system.spawnActor(actor.newActorImpl(fmt.Sprint(actor.context.children.Len()), receive))
 	latch <- true
 	return child
 }
 
-func (actor *actorImpl) SpawnWithName(name string, receive Receive) Actor{
+func (actor *actorImpl) SpawnWithName(name string, receive Receive) Actor {
 	system := actor.context.system
 	latch, child := system.spawnActor(actor.newActorImpl(name, receive))
 	latch <- true
 	return child
 }
 
-func (actor *actorImpl) SpawnWithLatch(receive Receive) (chan bool, Actor){
+func (actor *actorImpl) SpawnWithLatch(receive Receive) (chan bool, Actor) {
 	system := actor.context.system
 	latch, child := system.spawnActor(actor.newActorImpl(fmt.Sprint(actor.context.children.Len()), receive))
 	return latch, child
 }
 
-func (actor *actorImpl) SpawnWithNameAndLatch(name string, receive Receive) (chan bool, Actor){
+func (actor *actorImpl) SpawnWithNameAndLatch(name string, receive Receive) (chan bool, Actor) {
 	system := actor.context.system
 	latch, child := system.spawnActor(actor.newActorImpl(name, receive))
 	return latch, child
 }
 
-func (actor *actorImpl) SpawnForwardActor(name string, actors...Actor) ForwardingActor {
+func (actor *actorImpl) SpawnForwardActor(name string, actors ...Actor) ForwardingActor {
 	s := set.NewSet()
 	for _, actor := range actors {
 		s.Add(actor)
@@ -97,17 +100,17 @@ func (actor *actorImpl) SpawnForwardActor(name string, actors...Actor) Forwardin
 }
 
 func (actor *actorImpl) newActorImpl(name string, receive Receive) *actorImpl {
-	child := &actorImpl{ name: actor.canonicalName(name) }
+	child := &actorImpl{name: actor.canonicalName(name)}
 	child.context = newActorContext(actor.context, child, receive)
 	return child
 }
 
-func (actor *actorImpl) Name() string{
+func (actor *actorImpl) Name() string {
 	return actor.name
 }
 
-func (actor *actorImpl) canonicalName(name string) string{
-	return actor.Name()+"/"+name
+func (actor *actorImpl) canonicalName(name string) string {
+	return actor.Name() + "/" + name
 }
 
 func logPanic(actor *actorImpl) {

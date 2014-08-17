@@ -3,8 +3,9 @@ package main
 import (
 	"fmt"
 
-	actor "github.com/everpeace/go-actor"
 	"time"
+
+	actor "github.com/everpeace/go-actor"
 )
 
 func main() {
@@ -17,19 +18,19 @@ func main() {
 	latch := make(chan bool, 3)
 
 	system := actor.NewActorSystem("parent-child")
-	monitor := system.SpawnWithName("monitor", func(msg actor.Message, context actor.ActorContext){
+	monitor := system.SpawnWithName("monitor", func(msg actor.Message, context actor.ActorContext) {
 		if down, ok := msg[0].(actor.Down); ok {
 			fmt.Printf("%s detects: %s %s\n", context.Self().Name(), down.Actor.Name(), down.Cause)
 			latch <- true
 		}
 	})
 
-	parent := system.SpawnWithName("actorA", func(msg actor.Message, context actor.ActorContext){
-			fmt.Printf("actorA receive: %s\n", msg)
-		})
+	parent := system.SpawnWithName("actorA", func(msg actor.Message, context actor.ActorContext) {
+		fmt.Printf("actorA receive: %s\n", msg)
+	})
 	parent.Monitor(monitor)
 
-	child := parent.SpawnWithName("child", func(msg actor.Message, context actor.ActorContext){
+	child := parent.SpawnWithName("child", func(msg actor.Message, context actor.ActorContext) {
 		fmt.Printf("child receive: %s\n", msg)
 	})
 	child.Monitor(monitor)
@@ -37,7 +38,7 @@ func main() {
 	parent.Send(actor.Message{"hello"})
 	child.Send(actor.Message{"hello"})
 
-	<- time.After(time.Duration(1)*time.Second)
+	<-time.After(time.Duration(1) * time.Second)
 	fmt.Println("terminate child. you will see parent's termination too.")
 	child.Terminate()
 

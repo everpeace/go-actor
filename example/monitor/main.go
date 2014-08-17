@@ -6,6 +6,7 @@ import (
 
 	actor "github.com/everpeace/go-actor"
 )
+
 func main() {
 	fmt.Println("==========================================================")
 	fmt.Println("== Monitor example")
@@ -19,7 +20,7 @@ func main() {
 	system := actor.NewActorSystem("monitor-system")
 	echo := func() actor.Receive {
 		return func(msg actor.Message, context actor.ActorContext) {
-			if m , ok := msg[0].(actor.Down); ok {
+			if m, ok := msg[0].(actor.Down); ok {
 				fmt.Printf("%s detects: %s %s\n", context.Self().Name(), m.Actor.Name(), m.Cause)
 				latch <- true
 			} else {
@@ -32,7 +33,7 @@ func main() {
 	target := system.SpawnWithName("target", echo())
 	target.Monitor(monitor)
 
-	<- time.After(time.Duration(1)*time.Second)
+	<-time.After(time.Duration(1) * time.Second)
 
 	target.Send(actor.Message{"hello"})
 	target.Terminate()

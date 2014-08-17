@@ -1,34 +1,35 @@
 package actor
 
 import (
-	"sync"
 	"fmt"
+	"sync"
+
+	"strings"
 
 	"github.com/dropbox/godropbox/container/set"
-	"strings"
 )
 
 type actorSystem struct {
 	//TODO top level supervisor
-	name   string
-	wg     sync.WaitGroup
-	topLevelActors set.Set
+	name              string
+	wg                sync.WaitGroup
+	topLevelActors    set.Set
 	monitorForwarders set.Set
-	running set.Set
-	stopped set.Set
+	running           set.Set
+	stopped           set.Set
 }
 
-func NewActorSystem(name string) *actorSystem{
+func NewActorSystem(name string) *actorSystem {
 	return &actorSystem{
-		name:   name,
-		topLevelActors: set.NewSet(),
+		name:              name,
+		topLevelActors:    set.NewSet(),
 		monitorForwarders: set.NewSet(),
-		running: set.NewSet(),
-		stopped: set.NewSet(),
+		running:           set.NewSet(),
+		stopped:           set.NewSet(),
 	}
 }
 
-func (system *actorSystem) Name() string{
+func (system *actorSystem) Name() string {
 	return system.name
 }
 
@@ -79,8 +80,9 @@ func (system *actorSystem) WaitForAllActorsStopped() {
 
 func (system *actorSystem) Shutdown() {
 	system.topLevelActors.Subtract(system.monitorForwarders)
+	system.topLevelActors.Subtract(system.stopped)
 	for r := range system.topLevelActors.Iter() {
-		if actor, ok := r.(*actorImpl); ok{
+		if actor, ok := r.(*actorImpl); ok {
 			actor.context.shutdown()
 		}
 	}
@@ -88,32 +90,32 @@ func (system *actorSystem) Shutdown() {
 	system.wg.Wait()
 }
 
-func (system *actorSystem) shutdownMonitorForwarder(){
-	for r := range system.monitorForwarders.Iter(){
-		if actor, ok := r.(*forwardingActor); ok{
+func (system *actorSystem) shutdownMonitorForwarder() {
+	for r := range system.monitorForwarders.Iter() {
+		if actor, ok := r.(*forwardingActor); ok {
 			actor.Shutdown()
 		}
 	}
 }
 func (system *actorSystem) spawnMonitorForwarderFor(actor *actorImpl) ForwardingActor {
-	name := strings.Replace(actor.Name(), "/"+system.name+"/","", 1)
+	name := strings.Replace(actor.Name(), "/"+system.name+"/", "", 1)
 	forwarder := system.SpawnForwardActor(name)
 	system.monitorForwarders.Add(forwarder)
 	return forwarder
 }
 
 func (system *actorSystem) newTopLevelActorImpl(name string, receive Receive) *actorImpl {
-	actor := &actorImpl{ name: name }
+	actor := &actorImpl{name: name}
 	actor.context = newTopLevelActorContext(system, actor, receive)
 	system.topLevelActors.Add(actor)
 	return actor
 }
 
-func (system *actorSystem) spawnActor(actor *actorImpl) (chan bool, *actorImpl){
+func (system *actorSystem) spawnActor(actor *actorImpl) (chan bool, *actorImpl) {
 	startLatch := actor.context.start()
 	return startLatch, actor
 }
 
-func (system *actorSystem) canonicalName(name string) string{
-	return "/"+system.name+"/"+name
+func (system *actorSystem) canonicalName(name string) string {
+	return "/" + system.name + "/" + name
 }

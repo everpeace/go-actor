@@ -5,7 +5,7 @@ type Message []interface{} // Message is just slice (instead of tuple.)
 
 type Receive func(msg Message, context ActorContext)
 
-type ActorSystem interface{
+type ActorSystem interface {
 	actorFactory
 	Name()
 	WaitForAllActorsStopped()
@@ -39,13 +39,13 @@ type ActorContext interface {
 // Down message sent to Monitor
 type Down struct {
 	Cause string
-	Actor  Actor
+	Actor Actor
 }
 
-type actorFactory interface{
+type actorFactory interface {
 	Spawn(receive Receive) Actor
 	SpawnWithName(name string, receive Receive) Actor
 	SpawnWithLatch(receive Receive) (chan bool, Actor)
 	SpawnWithNameAndLatch(name string, receive Receive) (chan bool, Actor)
-	SpawnForwardActor(name string, actors...Actor) ForwardingActor
+	SpawnForwardActor(name string, actors ...Actor) ForwardingActor
 }
