@@ -2,39 +2,39 @@ package actor
 
 import "github.com/dropbox/godropbox/container/set"
 
-type forwardingActor struct {
-	*actorImpl
+type ForwardingActor struct {
+	*Actor
 }
 
-// internal message used in forwardingActor
+// internal message used in ForwardingActor
 type addRecipient struct {
-	recipient Actor
+	recipient *Actor
 }
 type removeRecipient struct {
-	recipient Actor
+	recipient *Actor
 }
 
-func (actor *forwardingActor) Add(recipient Actor) {
+func (actor *ForwardingActor) Add(recipient *Actor) {
 	go func() {
-		actor.context.Self().Send(Message{addRecipient{
+		actor.context.Self.Send(Message{addRecipient{
 			recipient: recipient,
 		}})
 	}()
 }
 
-func (actor *forwardingActor) Remove(recipient Actor) {
+func (actor *ForwardingActor) Remove(recipient *Actor) {
 	go func() {
-		actor.context.Self().Send(Message{removeRecipient{
+		actor.context.Self.Send(Message{removeRecipient{
 			recipient: recipient,
 		}})
 	}()
 }
 
 func forward(recipients set.Set) Receive {
-	return func(msg Message, context ActorContext) {
+	return func(msg Message, context *ActorContext) {
 		if len(msg) == 0 {
 			for actor := range recipients.Iter() {
-				if a, ok := actor.(Actor); ok {
+				if a, ok := actor.(*Actor); ok {
 					a.Send(msg)
 				}
 			}
@@ -44,7 +44,7 @@ func forward(recipients set.Set) Receive {
 			recipients.Remove(m.recipient)
 		} else {
 			for actor := range recipients.Iter() {
-				if a, ok := actor.(Actor); ok {
+				if a, ok := actor.(*Actor); ok {
 					a.Send(msg)
 				}
 			}

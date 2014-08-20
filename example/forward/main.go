@@ -19,8 +19,8 @@ func main() {
 
 	system := actor.NewActorSystem("forwad")
 	echo := func() actor.Receive {
-		return func(msg actor.Message, context actor.ActorContext) {
-			fmt.Printf("%s : %s\n", context.Self().Name(), msg)
+		return func(msg actor.Message, context *actor.ActorContext) {
+			fmt.Printf("%s : %s\n", context.Self.Name, msg)
 			latch <- true
 		}
 	}

@@ -19,12 +19,12 @@ func main() {
 
 	system := actor.NewActorSystem("monitor-system")
 	echo := func() actor.Receive {
-		return func(msg actor.Message, context actor.ActorContext) {
+		return func(msg actor.Message, context *actor.ActorContext) {
 			if m, ok := msg[0].(actor.Down); ok {
-				fmt.Printf("%s detects: %s %s\n", context.Self().Name(), m.Actor.Name(), m.Cause)
+				fmt.Printf("%s detects: %s %s\n", context.Self.Name, m.Actor.Name, m.Cause)
 				latch <- true
 			} else {
-				fmt.Printf("%s receive: %s\n", context.Self().Name(), msg)
+				fmt.Printf("%s receive: %s\n", context.Self.Name, msg)
 			}
 		}
 	}

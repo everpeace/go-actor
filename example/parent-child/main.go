@@ -18,19 +18,19 @@ func main() {
 	latch := make(chan bool, 3)
 
 	system := actor.NewActorSystem("parent-child")
-	monitor := system.SpawnWithName("monitor", func(msg actor.Message, context actor.ActorContext) {
+	monitor := system.SpawnWithName("monitor", func(msg actor.Message, context *actor.ActorContext) {
 		if down, ok := msg[0].(actor.Down); ok {
-			fmt.Printf("%s detects: %s %s\n", context.Self().Name(), down.Actor.Name(), down.Cause)
+			fmt.Printf("%s detects: %s %s\n", context.Self.Name, down.Actor.Name, down.Cause)
 			latch <- true
 		}
 	})
 
-	parent := system.SpawnWithName("actorA", func(msg actor.Message, context actor.ActorContext) {
+	parent := system.SpawnWithName("actorA", func(msg actor.Message, context *actor.ActorContext) {
 		fmt.Printf("actorA receive: %s\n", msg)
 	})
 	parent.Monitor(monitor)
 
-	child := parent.SpawnWithName("child", func(msg actor.Message, context actor.ActorContext) {
+	child := parent.SpawnWithName("child", func(msg actor.Message, context *actor.ActorContext) {
 		fmt.Printf("child receive: %s\n", msg)
 	})
 	child.Monitor(monitor)

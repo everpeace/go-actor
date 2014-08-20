@@ -9,21 +9,21 @@ import (
 
 // Actor Context
 // TODO actor hierarchy and supervision (this would introduce actor system)
-type actorContext struct {
-	system           *actorSystem
-	parent           *actorContext
-	self             *actorImpl
-	children         set.Set
-	monitor          ForwardingActor
+type ActorContext struct {
+	System           *ActorSystem
+	Parent           *ActorContext
+	Self             *Actor
+	Children         set.Set
+	monitor          *ForwardingActor
 	originalBehavior Receive
 	currentBehavior  Receive
 	behaviorStack    []Receive
 	mailbox          chan Message
 	killChan         chan kill
 	terminateChan    chan terminate
-	attachMonChan    chan Actor
-	detachMonChan    chan Actor
-	addChildChan     chan *actorContext
+	attachMonChan    chan *Actor
+	detachMonChan    chan *Actor
+	addChildChan     chan *ActorContext
 	shutdownChan     chan shutdown
 	receiveTimeout   time.Duration
 }
@@ -33,12 +33,7 @@ type terminate struct{}
 type kill struct{}
 type shutdown struct{}
 
-// ActorContext Interfaces
-func (context *actorContext) Self() Actor {
-	return context.self
-}
-
-func (context *actorContext) Become(behavior Receive, discardOld bool) {
+func (context *ActorContext) Become(behavior Receive, discardOld bool) {
 	if discardOld {
 		l := len(context.behaviorStack)
 		context.behaviorStack[l-1] = behavior
@@ -49,7 +44,7 @@ func (context *actorContext) Become(behavior Receive, discardOld bool) {
 	context.currentBehavior = behavior
 }
 
-func (context *actorContext) Unbecome() {
+func (context *ActorContext) Unbecome() {
 	l := len(context.behaviorStack)
 	if l > 1 {
 		context.behaviorStack = context.behaviorStack[:l-1]
@@ -60,44 +55,44 @@ func (context *actorContext) Unbecome() {
 }
 
 // constructor
-func newTopLevelActorContext(system *actorSystem, self *actorImpl, receive Receive) *actorContext {
+func newTopLevelActorContext(system *ActorSystem, self *Actor, receive Receive) *ActorContext {
 	// TODO make parameters configurable
-	return &actorContext{
-		system:           system,
-		self:             self,
-		children:         set.NewSet(),
+	return &ActorContext{
+		System:           system,
+		Self:             self,
+		Children:         set.NewSet(),
 		originalBehavior: receive,
 		currentBehavior:  receive,
 		behaviorStack:    []Receive{receive},
 		mailbox:          make(chan Message, 100),
 		// buffer size for control message is 1 (cotrol method would block)
-		attachMonChan:  make(chan Actor),
-		detachMonChan:  make(chan Actor),
+		attachMonChan:  make(chan *Actor),
+		detachMonChan:  make(chan *Actor),
 		terminateChan:  make(chan terminate),
 		killChan:       make(chan kill),
-		addChildChan:   make(chan *actorContext),
+		addChildChan:   make(chan *ActorContext),
 		shutdownChan:   make(chan shutdown),
 		receiveTimeout: time.Duration(10) * time.Millisecond,
 	}
 }
 
-func newActorContext(parent *actorContext, self *actorImpl, receive Receive) *actorContext {
+func newActorContext(parent *ActorContext, self *Actor, receive Receive) *ActorContext {
 	// TODO make parameters configurable
-	context := &actorContext{
-		system:           parent.system,
-		parent:           parent,
-		self:             self,
-		children:         set.NewSet(),
+	context := &ActorContext{
+		System:           parent.System,
+		Parent:           parent,
+		Self:             self,
+		Children:         set.NewSet(),
 		originalBehavior: receive,
 		currentBehavior:  receive,
 		behaviorStack:    []Receive{receive},
 		mailbox:          make(chan Message, 100),
 		// buffer size for control message is 1 (cotrol method would block)
-		attachMonChan:  make(chan Actor),
-		detachMonChan:  make(chan Actor),
+		attachMonChan:  make(chan *Actor),
+		detachMonChan:  make(chan *Actor),
 		terminateChan:  make(chan terminate),
 		killChan:       make(chan kill),
-		addChildChan:   make(chan *actorContext),
+		addChildChan:   make(chan *ActorContext),
 		shutdownChan:   make(chan shutdown),
 		receiveTimeout: time.Duration(10) * time.Millisecond,
 	}
@@ -105,25 +100,25 @@ func newActorContext(parent *actorContext, self *actorImpl, receive Receive) *ac
 	return context
 }
 
-func (context *actorContext) closeAllChan() {
+func (context *ActorContext) closeAllChan() {
 	// TODO flush remained message to deadletter channel??
 	go func() {
-		defer logPanic(context.self)
+		defer logPanic(context.Self)
 		close(context.mailbox)
 		close(context.terminateChan)
 		close(context.killChan)
 	}()
 }
 
-func (context *actorContext) start() chan bool {
+func (context *ActorContext) start() chan bool {
 	startLatch := make(chan bool)
-	context.system.wg.Add(1)
+	context.System.wg.Add(1)
 	go func() {
 		defer func() {
-			context.system.wg.Done()
+			context.System.wg.Done()
 			context.closeAllChan()
 		}()
-		context.system.running.Add(context.Self())
+		context.System.running.Add(context.Self)
 		<-startLatch
 		close(startLatch)
 		context.loop()
@@ -131,28 +126,28 @@ func (context *actorContext) start() chan bool {
 	return startLatch
 }
 
-func (context *actorContext) attachMonitor(mon Actor) {
+func (context *ActorContext) attachMonitor(mon *Actor) {
 	context.attachMonChan <- mon
 }
 
-func (context *actorContext) detachMonitor(mon Actor) {
+func (context *ActorContext) detachMonitor(mon *Actor) {
 	context.detachMonChan <- mon
 }
 
-func (context *actorContext) kill() {
+func (context *ActorContext) kill() {
 	context.killChan <- kill{}
 }
 
-func (context *actorContext) terminate() {
+func (context *ActorContext) terminate() {
 	context.terminateChan <- terminate{}
 }
 
-func (context *actorContext) shutdown() {
+func (context *ActorContext) shutdown() {
 	context.shutdownChan <- shutdown{}
 }
 
 // Actor's main loop which is executed in go routine
-func (context *actorContext) loop() {
+func (context *ActorContext) loop() {
 	// TODO how monitor detect STARTED??
 	// now monitor can't detect STARTED.
 	// context.notifyMonitors(Message{STARTED})
@@ -162,39 +157,39 @@ func (context *actorContext) loop() {
 		case <-context.killChan:
 			context.notifyMonitors(Message{Down{
 				Cause: "killed",
-				Actor: context.Self(),
+				Actor: context.Self,
 			}})
-			if context.parent != nil {
-				context.parent.kill()
+			if context.Parent != nil {
+				context.Parent.kill()
 			}
 			return
 		case <-context.terminateChan:
 			context.notifyMonitors(Message{Down{
 				Cause: "terminated",
-				Actor: context.Self(),
+				Actor: context.Self,
 			}})
-			if context.parent != nil {
-				context.parent.terminate()
+			if context.Parent != nil {
+				context.Parent.terminate()
 			}
 			return
 		case mon := <-context.attachMonChan:
 			if context.monitor == nil {
-				context.monitor = context.system.spawnMonitorForwarderFor(context.self)
+				context.monitor = context.System.spawnMonitorForwarderFor(context.Self)
 			}
 			context.monitor.Add(mon)
 		case mon := <-context.detachMonChan:
 			context.monitor.Remove(mon)
 		case child := <-context.addChildChan:
-			context.children.Add(child)
+			context.Children.Add(child)
 		case <-context.shutdownChan:
-			for child := range context.children.Iter() {
-				if childContext, ok := child.(*actorContext); ok {
+			for child := range context.Children.Iter() {
+				if childContext, ok := child.(*ActorContext); ok {
 					childContext.shutdown()
 				}
 			}
 			context.notifyMonitors(Message{Down{
 				Cause: "shutdowned",
-				Actor: context.Self(),
+				Actor: context.Self,
 			}})
 			return
 		default:
@@ -205,7 +200,7 @@ func (context *actorContext) loop() {
 	}
 }
 
-func (context *actorContext) processOneMessage() {
+func (context *ActorContext) processOneMessage() {
 	select {
 	case msg := <-context.mailbox:
 		context.currentBehavior(msg, context)
@@ -215,7 +210,7 @@ func (context *actorContext) processOneMessage() {
 	}
 }
 
-func (context *actorContext) notifyMonitors(msg Message) {
+func (context *ActorContext) notifyMonitors(msg Message) {
 	if context.monitor != nil {
 		context.monitor.Send(msg)
 	} else {
