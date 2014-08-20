@@ -77,39 +77,39 @@ func (system *ActorSystem) WaitForAllActorsTerminated() {
 }
 
 func (system *ActorSystem) ShutdownNow() {
-	system.topLevelActors.Subtract(system.monitorForwarders)
 	system.topLevelActors.Subtract(system.stopped)
-	for r := range system.topLevelActors.Iter() {
+	system.topLevelActors.Do(func (r interface{}) {
 		if actor, ok := r.(*Actor); ok {
 			actor.context.kill()
 		}
-	}
+	})
 	system.shutdownMonitorForwarder()
 	system.wg.Wait()
 }
 
 func (system *ActorSystem) GracefulShutdown() {
-	system.topLevelActors.Subtract(system.monitorForwarders)
 	system.topLevelActors.Subtract(system.stopped)
-	for r := range system.topLevelActors.Iter() {
+	system.topLevelActors.Do(func (r interface{}) {
 		if actor, ok := r.(*Actor); ok {
+			fmt.Println("gracefulshutdown", actor.Name)
 			actor.context.terminate()
 		}
-	}
+	})
 	system.shutdownMonitorForwarder()
 	system.wg.Wait()
 }
 
 func (system *ActorSystem) shutdownMonitorForwarder() {
-	for r := range system.monitorForwarders.Iter() {
+	system.monitorForwarders.Do(func(r interface{}) {
 		if actor, ok := r.(*ForwardingActor); ok {
 			actor.context.terminate()
 		}
-	}
+	})
 }
 func (system *ActorSystem) spawnMonitorForwarderFor(actor *Actor) *ForwardingActor {
 	name := strings.Replace(actor.Name, "/"+system.Name+"/", "", 1)
 	forwarder := system.SpawnForwardActor(name+"-MonitorForwarder")
+	system.topLevelActors.Remove(forwarder.Actor)
 	system.monitorForwarders.Add(forwarder)
 	return forwarder
 }

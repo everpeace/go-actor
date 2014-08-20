@@ -36,12 +36,11 @@ func main() {
 	child.Send(actor.Message{"hello"})
 
 	<-time.After(time.Duration(1) * time.Second)
-	fmt.Println("terminate child. you will see parent's termination too.")
-	child.Terminate()
+	fmt.Println("terminate parent. you will see children's termination too.")
+	parent.Terminate()
 
+	<-time.After(time.Duration(1) * time.Second)
 	monitor.Terminate()
-
-	// wait for parent terminated which is triggered by children's termination.
 	system.WaitForAllActorsTerminated()
 	fmt.Println("==========================================================")
 }

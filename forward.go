@@ -33,21 +33,21 @@ func (actor *ForwardingActor) Remove(recipient *Actor) {
 func forward(recipients set.Set) Receive {
 	return func(msg Message, context *ActorContext) {
 		if len(msg) == 0 {
-			for actor := range recipients.Iter() {
+			recipients.Do(func(actor interface{}) {
 				if a, ok := actor.(*Actor); ok {
 					a.Send(msg)
 				}
-			}
+			})
 		} else if m, ok := msg[0].(addRecipient); ok {
 			recipients.Add(m.recipient)
 		} else if m, ok := msg[0].(removeRecipient); ok {
 			recipients.Remove(m.recipient)
 		} else {
-			for actor := range recipients.Iter() {
+			recipients.Do(func(actor interface{}) {
 				if a, ok := actor.(*Actor); ok {
 					a.Send(msg)
 				}
-			}
+			})
 		}
 	}
 }

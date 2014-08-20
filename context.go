@@ -133,9 +133,11 @@ func (context *ActorContext) loop() {
 				Cause: "killed",
 				Actor: context.Self,
 			}})
-			if context.Parent != nil {
-				context.Parent.kill()
-			}
+			context.Children.Do(func(c interface{}){
+				if child, ok:= c.(*ActorContext); ok {
+					child.kill()
+				}
+			})
 			return
 		case mon := <-context.attachMonChan:
 			if context.monitor == nil {
@@ -166,9 +168,11 @@ func (context *ActorContext) processOneMessage() bool{
 					Cause: "terminated",
 					Actor: context.Self,
 				}})
-				if context.Parent != nil {
-					context.Parent.terminate()
-				}
+				context.Children.Do(func(c interface{}){
+					if child, ok:= c.(*ActorContext); ok {
+						child.terminate()
+					}
+				})
 				return true
 			} else {
 				context.currentBehavior(msg, context)
