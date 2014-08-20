@@ -91,8 +91,12 @@ func (actor *Actor) SpawnForwardActor(name string, actors ...*Actor) *Forwarding
 		s.Add(actor)
 	}
 	forwardActor := &ForwardingActor{
-		actor.newActor(name, forward(s)),
+		addRecipientChan: make(chan addRecipient),
+		delRecipientChan: make(chan removeRecipient),
+		recipients: s,
 	}
+	forwardActor.Actor = actor.newActor(name, forwardActor.receive())
+	forwardActor.context.prePrecessHook = forwardActor.preProcessHook()
 	start := forwardActor.context.start()
 	start <- true
 	return forwardActor

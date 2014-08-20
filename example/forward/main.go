@@ -25,8 +25,6 @@ func main() {
 	echo2 := system.SpawnWithName("echo2", echo())
 	forward := system.SpawnForwardActor("forward", echo1)
 	forward.Add(echo2)
-
-	<-time.After(time.Duration(1) * time.Second)
 	fmt.Println("Sent [hello] to \"forward\"")
 	forward.Send(actor.Message{"hello"})
 

@@ -23,6 +23,8 @@ type ActorContext struct {
 	detachMonChan    chan *Actor
 	addChildChan     chan *ActorContext
 	receiveTimeout   time.Duration
+	prePrecessHook   func()
+
 }
 
 // internal Messages accepted by actorContext
@@ -149,6 +151,9 @@ func (context *ActorContext) loop() {
 		case child := <-context.addChildChan:
 			context.Children.Add(child)
 		default:
+			if context.prePrecessHook!= nil {
+				context.prePrecessHook()
+			}
 			receiveTerminated = context.processOneMessage()
 		}
 		if receiveTerminated {

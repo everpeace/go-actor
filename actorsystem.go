@@ -64,8 +64,12 @@ func (system *ActorSystem) SpawnForwardActor(name string, actors ...*Actor) *For
 		s.Add(actor)
 	}
 	forwardActor := &ForwardingActor{
-		system.newTopLevelActor(system.canonicalName(name), forward(s)),
+		addRecipientChan: make(chan addRecipient),
+		delRecipientChan: make(chan removeRecipient),
+		recipients: s,
 	}
+	forwardActor.Actor = system.newTopLevelActor(system.canonicalName(name), forwardActor.receive())
+	forwardActor.context.prePrecessHook = forwardActor.preProcessHook()
 	start := forwardActor.context.start()
 	start <- true
 	return forwardActor

@@ -4,6 +4,9 @@ import "github.com/dropbox/godropbox/container/set"
 
 type ForwardingActor struct {
 	*Actor
+	addRecipientChan chan addRecipient
+	delRecipientChan chan removeRecipient
+	recipients set.Set
 }
 
 // internal message used in ForwardingActor
@@ -15,39 +18,35 @@ type removeRecipient struct {
 }
 
 func (actor *ForwardingActor) Add(recipient *Actor) {
-	go func() {
-		actor.context.Self.Send(Message{addRecipient{
-			recipient: recipient,
-		}})
-	}()
+	actor.addRecipientChan <- addRecipient{recipient: recipient}
 }
 
 func (actor *ForwardingActor) Remove(recipient *Actor) {
-	go func() {
-		actor.context.Self.Send(Message{removeRecipient{
-			recipient: recipient,
-		}})
-	}()
+	actor.delRecipientChan <- removeRecipient{recipient: recipient}
 }
 
-func forward(recipients set.Set) Receive {
-	return func(msg Message, context *ActorContext) {
-		if len(msg) == 0 {
-			recipients.Do(func(actor interface{}) {
-				if a, ok := actor.(*Actor); ok {
-					a.Send(msg)
-				}
-			})
-		} else if m, ok := msg[0].(addRecipient); ok {
-			recipients.Add(m.recipient)
-		} else if m, ok := msg[0].(removeRecipient); ok {
-			recipients.Remove(m.recipient)
-		} else {
-			recipients.Do(func(actor interface{}) {
-				if a, ok := actor.(*Actor); ok {
-					a.Send(msg)
-				}
-			})
+func (actor *ForwardingActor) preProcessHook() func(){
+	return func() {
+		select{
+		case m := <-actor.addRecipientChan:
+			actor.recipients.Add(m.recipient)
+		case m := <-actor.delRecipientChan:
+			actor.recipients.Remove(m.recipient)
+		default:
 		}
 	}
 }
+
+func (actor *ForwardingActor) receive() Receive {
+	return func(msg Message, context *ActorContext) {
+		actor.recipients.Do(func(e interface{}) {
+			if a, ok := e.(*Actor); ok {
+				a.Send(msg)
+			}
+			if a, ok := e.(*ForwardingActor); ok {
+				a.Send(msg)
+			}
+		})
+	}
+}
+
