@@ -73,18 +73,6 @@ func (actor *Actor) SpawnWithName(name string, receive Receive) *Actor {
 	return child
 }
 
-func (actor *Actor) SpawnWithLatch(receive Receive) (chan bool, *Actor) {
-	system := actor.System
-	latch, child := system.spawnActor(actor.newActor(fmt.Sprint(actor.context.Children.Len()), receive))
-	return latch, child
-}
-
-func (actor *Actor) SpawnWithNameAndLatch(name string, receive Receive) (chan bool, *Actor) {
-	system := actor.System
-	latch, child := system.spawnActor(actor.newActor(name, receive))
-	return latch, child
-}
-
 func (actor *Actor) SpawnForwardActor(name string, actors ...*Actor) *ForwardingActor {
 	s := set.NewSet()
 	for _, actor := range actors {

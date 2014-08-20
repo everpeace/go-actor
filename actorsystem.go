@@ -46,18 +46,6 @@ func (system *ActorSystem) SpawnWithName(name string, receive Receive) *Actor {
 	return actor
 }
 
-func (system *ActorSystem) SpawnWithLatch(receive Receive) (chan bool, *Actor) {
-	newName := system.canonicalName(fmt.Sprint(system.topLevelActors.Len()))
-	startLatch, actor := system.spawnActor(system.newTopLevelActor(newName, receive))
-	return startLatch, actor
-}
-
-func (system *ActorSystem) SpawnWithNameAndLatch(name string, receive Receive) (chan bool, *Actor) {
-	newName := system.canonicalName(name)
-	startLatch, actor := system.spawnActor(system.newTopLevelActor(newName, receive))
-	return startLatch, actor
-}
-
 func (system *ActorSystem) SpawnForwardActor(name string, actors ...*Actor) *ForwardingActor {
 	s := set.NewSet()
 	for _, actor := range actors {
@@ -95,7 +83,6 @@ func (system *ActorSystem) GracefulShutdown() {
 	system.topLevelActors.Subtract(system.stopped)
 	system.topLevelActors.Do(func (r interface{}) {
 		if actor, ok := r.(*Actor); ok {
-			fmt.Println("gracefulshutdown", actor.Name)
 			actor.context.terminate()
 		}
 	})
