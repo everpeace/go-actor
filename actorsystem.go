@@ -109,7 +109,7 @@ func (system *ActorSystem) shutdownMonitorForwarder() {
 }
 func (system *ActorSystem) spawnMonitorForwarderFor(actor *Actor) *ForwardingActor {
 	name := strings.Replace(actor.Name, "/"+system.Name+"/", "", 1)
-	forwarder := system.SpawnForwardActor(name)
+	forwarder := system.SpawnForwardActor(name+"-MonitorForwarder")
 	system.monitorForwarders.Add(forwarder)
 	return forwarder
 }
