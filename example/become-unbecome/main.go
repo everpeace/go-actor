@@ -13,13 +13,9 @@ func main() {
 	fmt.Println("== An actor's behavior changes:")
 	fmt.Println("== echo --(become)-->echo in upper case --(unbecome)--> echo.")
 
-	// The latch is to ensure the completion of all examples' execution.
-	latch := make(chan bool)
-
 	actorSystem := actor.NewActorSystem("become-unbecome")
 	terminate := func(msg actor.Message, context *actor.ActorContext) {
 		context.Self.Terminate()
-		latch <- true
 	}
 
 	echoInUpper := func(msg actor.Message, context *actor.ActorContext) {
@@ -44,10 +40,8 @@ func main() {
 	a.Send(actor.Message{"become terminate!!"})
 	a.Send(actor.Message{})
 
-	<-latch
-
 	// Shutdown method shutdown all actors.
-	actorSystem.Shutdown()
+	actorSystem.GracefulShutdown()
 	fmt.Println("==========================================================")
 
 }

@@ -9,6 +9,7 @@ import (
 
 type Actor struct {
 	Name    string
+	System  *ActorSystem
 	context *ActorContext
 }
 
@@ -19,30 +20,24 @@ func (actor *Actor) Send(msg Message) {
 	}()
 }
 
+// Terminates the actor in graceful manner
+// That means actor will stop after processing all messages in their mailbox.
 func (actor *Actor) Terminate() {
-	actor.context.System.running.Remove(actor)
-	actor.context.System.stopped.Add(actor)
+	actor.System.running.Remove(actor)
+	actor.System.stopped.Add(actor)
 	go func() {
 		defer logPanic(actor)
 		actor.context.terminate()
 	}()
 }
 
+// Kills the actor immediately.
 func (actor *Actor) Kill() {
-	actor.context.System.running.Remove(actor)
-	actor.context.System.stopped.Add(actor)
+	actor.System.running.Remove(actor)
+	actor.System.stopped.Add(actor)
 	go func() {
 		defer logPanic(actor)
 		actor.context.kill()
-	}()
-}
-
-func (actor *Actor) Shutdown() {
-	actor.context.System.running.Remove(actor)
-	actor.context.System.stopped.Add(actor)
-	go func() {
-		defer logPanic(actor)
-		actor.context.shutdown()
 	}()
 }
 
@@ -60,28 +55,32 @@ func (actor *Actor) Demonitor(mon *Actor) {
 	}()
 }
 
+func (actor *Actor) isRunning() bool {
+	return actor.System.running.Contains(actor)
+}
+
 func (actor *Actor) Spawn(receive Receive) *Actor {
-	system := actor.context.System
+	system := actor.System
 	latch, child := system.spawnActor(actor.newActor(fmt.Sprint(actor.context.Children.Len()), receive))
 	latch <- true
 	return child
 }
 
 func (actor *Actor) SpawnWithName(name string, receive Receive) *Actor {
-	system := actor.context.System
+	system := actor.System
 	latch, child := system.spawnActor(actor.newActor(name, receive))
 	latch <- true
 	return child
 }
 
 func (actor *Actor) SpawnWithLatch(receive Receive) (chan bool, *Actor) {
-	system := actor.context.System
+	system := actor.System
 	latch, child := system.spawnActor(actor.newActor(fmt.Sprint(actor.context.Children.Len()), receive))
 	return latch, child
 }
 
 func (actor *Actor) SpawnWithNameAndLatch(name string, receive Receive) (chan bool, *Actor) {
-	system := actor.context.System
+	system := actor.System
 	latch, child := system.spawnActor(actor.newActor(name, receive))
 	return latch, child
 }
@@ -100,7 +99,7 @@ func (actor *Actor) SpawnForwardActor(name string, actors ...*Actor) *Forwarding
 }
 
 func (actor *Actor) newActor(name string, receive Receive) *Actor {
-	child := &Actor{Name: actor.canonicalName(name)}
+	child := &Actor{Name: actor.canonicalName(name), System: actor.System }
 	child.context = newActorContext(actor.context, child, receive)
 	return child
 }

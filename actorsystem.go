@@ -71,17 +71,29 @@ func (system *ActorSystem) SpawnForwardActor(name string, actors ...*Actor) *For
 	return forwardActor
 }
 
-func (system *ActorSystem) WaitForAllActorsStopped() {
+func (system *ActorSystem) WaitForAllActorsTerminated() {
 	system.shutdownMonitorForwarder()
 	system.wg.Wait()
 }
 
-func (system *ActorSystem) Shutdown() {
+func (system *ActorSystem) ShutdownNow() {
 	system.topLevelActors.Subtract(system.monitorForwarders)
 	system.topLevelActors.Subtract(system.stopped)
 	for r := range system.topLevelActors.Iter() {
 		if actor, ok := r.(*Actor); ok {
-			actor.context.shutdown()
+			actor.context.kill()
+		}
+	}
+	system.shutdownMonitorForwarder()
+	system.wg.Wait()
+}
+
+func (system *ActorSystem) GracefulShutdown() {
+	system.topLevelActors.Subtract(system.monitorForwarders)
+	system.topLevelActors.Subtract(system.stopped)
+	for r := range system.topLevelActors.Iter() {
+		if actor, ok := r.(*Actor); ok {
+			actor.context.terminate()
 		}
 	}
 	system.shutdownMonitorForwarder()
@@ -91,7 +103,7 @@ func (system *ActorSystem) Shutdown() {
 func (system *ActorSystem) shutdownMonitorForwarder() {
 	for r := range system.monitorForwarders.Iter() {
 		if actor, ok := r.(*ForwardingActor); ok {
-			actor.Shutdown()
+			actor.context.terminate()
 		}
 	}
 }
@@ -103,8 +115,8 @@ func (system *ActorSystem) spawnMonitorForwarderFor(actor *Actor) *ForwardingAct
 }
 
 func (system *ActorSystem) newTopLevelActor(name string, receive Receive) *Actor {
-	actor := &Actor{Name: name}
-	actor.context = newTopLevelActorContext(system, actor, receive)
+	actor := &Actor{Name: name, System: system }
+	actor.context = newActorContext(nil, actor, receive)
 	system.topLevelActors.Add(actor)
 	return actor
 }

@@ -14,14 +14,11 @@ func main() {
 	fmt.Println("== Actor has children.  Children's termination is propagated")
 	fmt.Println("== to parent.")
 
-	// The latch is to ensure the completion of all examples' execution.
-	latch := make(chan bool, 3)
 
 	system := actor.NewActorSystem("parent-child")
 	monitor := system.SpawnWithName("monitor", func(msg actor.Message, context *actor.ActorContext) {
 		if down, ok := msg[0].(actor.Down); ok {
 			fmt.Printf("%s detects: %s %s\n", context.Self.Name, down.Actor.Name, down.Cause)
-			latch <- true
 		}
 	})
 
@@ -42,11 +39,9 @@ func main() {
 	fmt.Println("terminate child. you will see parent's termination too.")
 	child.Terminate()
 
-	<-latch
-	<-latch
 	monitor.Terminate()
 
 	// wait for parent terminated which is triggered by children's termination.
-	system.WaitForAllActorsStopped()
+	system.WaitForAllActorsTerminated()
 	fmt.Println("==========================================================")
 }

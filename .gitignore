@@ -25,3 +25,6 @@ _testmain.go
 # GoDep
 _workspace
 
+# IntelliJ
+.idea
+
