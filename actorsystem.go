@@ -15,7 +15,7 @@ type ActorSystem struct {
 	//TODO top level supervisor
 	Name              string
 	wg                sync.WaitGroup
-	topLevelActors    set.Set
+	topLevelActors    *actorSet
 	monitorForwarders set.Set
 	running           set.Set
 	stopped           set.Set
@@ -25,7 +25,7 @@ type ActorSystem struct {
 func NewActorSystem(name string) *ActorSystem {
 	return &ActorSystem{
 		Name:              name,
-		topLevelActors:    set.NewSet(),
+		topLevelActors:    newActorSet(set.NewSet()),
 		monitorForwarders: set.NewSet(),
 		running:           set.NewSet(),
 		stopped:           set.NewSet(),
@@ -89,10 +89,8 @@ func (system *ActorSystem) Shutdown() {
 func (system *ActorSystem) ShutdownIn(duration time.Duration){
 	<-time.After(duration)
 	system.topLevelActors.Subtract(system.stopped)
-	system.topLevelActors.Do(func (r interface{}) {
-		if actor, ok := r.(*Actor); ok {
+	system.topLevelActors.Do(func (actor *Actor) {
 			actor.context.kill()
-		}
 	})
 	system.shutdownMonitorForwarder()
 	system.wg.Wait()
@@ -111,10 +109,8 @@ func (system *ActorSystem) GracefulShutdown() {
 func (system *ActorSystem) GracefulShutdownIn(duration time.Duration) {
 	<-time.After(duration)
 	system.topLevelActors.Subtract(system.stopped)
-	system.topLevelActors.Do(func (r interface{}) {
-		if actor, ok := r.(*Actor); ok {
-			actor.context.terminate()
-		}
+	system.topLevelActors.Do(func (actor *Actor) {
+		actor.context.terminate()
 	})
 	system.shutdownMonitorForwarder()
 	system.wg.Wait()
@@ -141,7 +137,7 @@ func (system *ActorSystem) newTopLevelActor(name string, receive Receive) *Actor
 		Name: name,
 		System: system,
 		parent: nil,
-		children: set.NewSet(),
+		children: newActorSet(set.NewSet()),
 	}
 	actor.context = newActorContext(actor, receive)
 	system.topLevelActors.Add(actor)
@@ -152,7 +148,3 @@ func (system *ActorSystem) spawnActor(actor *Actor) (chan bool, *Actor) {
 	startLatch := actor.context.start()
 	return startLatch, actor
 }
-
-//func (system *ActorSystem) canonicalName() string {
-//	return system.Name
-//}

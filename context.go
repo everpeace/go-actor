@@ -151,10 +151,8 @@ func (context *ActorContext) loop() {
 				Cause: "killed",
 				Actor: context.Self,
 			}})
-			context.Self.children.Do(func(c interface{}){
-				if child, ok:= c.(*Actor); ok {
-					child.context.kill()
-				}
+			context.Self.children.Do(func(child *Actor){
+				child.context.kill()
 			})
 			return
 		case mon := <-context.attachMonChan:
@@ -189,10 +187,8 @@ func (context *ActorContext) processOneMessage() bool{
 					Cause: "terminated",
 					Actor: context.Self,
 				}})
-				context.Self.children.Do(func(c interface{}){
-					if child, ok:= c.(*Actor); ok {
-						child.context.terminate()
-					}
+				context.Self.children.Do(func(child *Actor){
+					child.context.terminate()
 				})
 				return true
 			} else {

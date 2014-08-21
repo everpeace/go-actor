@@ -13,7 +13,7 @@ import (
 type Actor struct {
 	Name     string
 	parent   *Actor
-	children set.Set
+	children *actorSet
 	System   *ActorSystem
 	context  *ActorContext
 }
@@ -126,7 +126,7 @@ func (actor *Actor) newChildActor(name string, receive Receive) *Actor {
 		Name: name,
 		System: actor.System,
 		parent: actor,
-		children: set.NewSet(),
+		children: newActorSet(set.NewSet()),
 	}
 	actor.context.addChildChan <- child
 	child.context = newActorContext(child, receive)
