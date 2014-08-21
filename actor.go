@@ -136,18 +136,29 @@ func (actor *Actor) newChildActor(name string, receive Receive) *Actor {
 // CanonicalName returns a full path name of the actor which indicates
 // actor hierarchy from the actor system to which it belongs.
 //
-// Canonical name forms '<actor system name>:/<parent actor name>/<actor name>'
+// Canonical name forms '<actor system name>:<actor path>'
 // For example,
 //   actorSystem := actor.NewActorSystem("systemX")
 //   foo := actorSystem.Spawn("foo", ..Receive function..)
 //   bar := foo.Spawn("bar", ..Receive function..)
-//   foo.CanonicalName() // ==> "systemX:/foo"
 //   bar.CanonicalName() // ==> "systemX:/foo/bar"
 func (actor *Actor) CanonicalName() string {
+	return actor.System.Name+":"+actor.ActorPath()
+}
+
+// ActorPath returns an actor path from the actor system root.
+// An actor path is deliminated by '/'
+// For example,
+//   actorSystem := actor.NewActorSystem("systemX")
+//   foo := actorSystem.Spawn("foo", ..Receive function..)
+//   bar := foo.Spawn("bar", ..Receive function..)
+//   foo.ActorPath() // ===> /foo
+//   bar.ActorPath() // ==> "/foo/bar"
+func (actor *Actor) ActorPath() string {
 	if actor.parent == nil {
-		return actor.System.Name+":/"+actor.Name
+		return "/"+actor.Name
 	} else {
-		return actor.parent.CanonicalName()+"/"+actor.Name
+		return actor.parent.ActorPath()+"/"+actor.Name
 	}
 }
 
