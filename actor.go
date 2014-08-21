@@ -92,7 +92,7 @@ func (actor *Actor) IsRunning() bool {
 //  // then child will also terminate.
 func (actor *Actor) Spawn(receive Receive) *Actor {
 	system := actor.System
-	latch, child := system.spawnActor(actor.newActor(fmt.Sprint(actor.context.Children.Len()), receive))
+	latch, child := system.spawnActor(actor.newActor(fmt.Sprint(actor.context.children.Len()), receive))
 	latch <- true
 	return child
 }

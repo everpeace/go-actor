@@ -10,11 +10,12 @@ import (
 // Actor Context
 //
 // Actor Context will be passed to actor's message handler with message received.
-// This data enables message handler to access myself, to change its behavior.
+// This data enables message handler to access myself(it's useful when you want
+// to send a message to myself), and to change its behavior.
 type ActorContext struct {
-	Parent           *ActorContext
+	parent           *ActorContext
 	Self             *Actor
-	Children         set.Set
+	children         set.Set
 	monitor          *ForwardingActor
 	originalBehavior Receive
 	currentBehavior  Receive
@@ -81,9 +82,9 @@ func (context *ActorContext) Unbecome() {
 func newActorContext(parent *ActorContext, self *Actor, receive Receive) *ActorContext {
 	// TODO make parameters configurable
 	context := &ActorContext{
-		Parent:           parent,
+		parent:           parent,
 		Self:             self,
-		Children:         set.NewSet(),
+		children:         set.NewSet(),
 		originalBehavior: receive,
 		currentBehavior:  receive,
 		behaviorStack:    []Receive{receive},
@@ -159,7 +160,7 @@ func (context *ActorContext) loop() {
 				Cause: "killed",
 				Actor: context.Self,
 			}})
-			context.Children.Do(func(c interface{}){
+			context.children.Do(func(c interface{}){
 				if child, ok:= c.(*ActorContext); ok {
 					child.kill()
 				}
@@ -173,7 +174,7 @@ func (context *ActorContext) loop() {
 		case mon := <-context.detachMonChan:
 			context.monitor.Remove(mon)
 		case child := <-context.addChildChan:
-			context.Children.Add(child)
+			context.children.Add(child)
 		default:
 			if context.prePrecessHook!= nil {
 				context.prePrecessHook()
@@ -197,7 +198,7 @@ func (context *ActorContext) processOneMessage() bool{
 					Cause: "terminated",
 					Actor: context.Self,
 				}})
-				context.Children.Do(func(c interface{}){
+				context.children.Do(func(c interface{}){
 					if child, ok:= c.(*ActorContext); ok {
 						child.terminate()
 					}
