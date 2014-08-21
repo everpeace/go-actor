@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	actor "github.com/everpeace/go-actor"
+	"time"
 )
 
 func main() {
@@ -13,7 +14,7 @@ func main() {
 	fmt.Println("== An actor's behavior changes:")
 	fmt.Println("== echo --(become)-->echo in upper case --(unbecome)--> echo.")
 
-	actorSystem := actor.NewActorSystem("become-unbecome")
+	system := actor.NewActorSystem("become-unbecome")
 	terminate := func(msg actor.Message, context *actor.ActorContext) {
 		context.Self.Terminate()
 	}
@@ -34,14 +35,14 @@ func main() {
 		}
 	}
 
-	a := actorSystem.Spawn(echo)
+	a := system.Spawn(echo)
 	a.Send(actor.Message{"this should be echoed."})
 	a.Send(actor.Message{"this should be echoed in upper case."})
 	a.Send(actor.Message{"become terminate!!"})
 	a.Send(actor.Message{})
 
 	// Shutdown method shutdown all actors.
-	actorSystem.GracefulShutdown()
+	system.GracefulShutdownIn(time.Duration(1) * time.Second)
 	fmt.Println("==========================================================")
 
 }

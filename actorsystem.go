@@ -7,8 +7,10 @@ import (
 	"strings"
 
 	"github.com/dropbox/godropbox/container/set"
+	"time"
 )
 
+// ActorSystem is an umbrella which maintains actor hierarchy.
 type ActorSystem struct {
 	//TODO top level supervisor
 	Name              string
@@ -19,7 +21,7 @@ type ActorSystem struct {
 	stopped           set.Set
 }
 
-// ActorSystem contstructor.
+// NewActorSystem creates an ActorSystem instance.
 func NewActorSystem(name string) *ActorSystem {
 	return &ActorSystem{
 		Name:              name,
@@ -31,7 +33,14 @@ func NewActorSystem(name string) *ActorSystem {
 }
 
 
-// actor starter
+// Spawn creates and starts an actor in the actor system.
+//
+// This takes Receive(type ailis for actor's message handler) returns the pointer to started actor.
+//
+// For example, simple echo actor would be:
+//  actorSystem.Spawn(func(msg Message, context *ActorContext){
+//     fmt.Println(msg)
+//  })
 func (system *ActorSystem) Spawn(receive Receive) *Actor {
 	newName := system.canonicalName(fmt.Sprint(system.topLevelActors.Len()))
 	startLatch, actor := system.spawnActor(system.newTopLevelActor(newName, receive))
@@ -39,6 +48,7 @@ func (system *ActorSystem) Spawn(receive Receive) *Actor {
 	return actor
 }
 
+// SpawnWithName is the same as Spawn except that you can name it.
 func (system *ActorSystem) SpawnWithName(name string, receive Receive) *Actor {
 	newName := system.canonicalName(name)
 	startLatch, actor := system.spawnActor(system.newTopLevelActor(newName, receive))
@@ -63,12 +73,24 @@ func (system *ActorSystem) SpawnForwardActor(name string, actors ...*Actor) *For
 	return forwardActor
 }
 
-func (system *ActorSystem) WaitForAllActorsTerminated() {
+// WaitForAllActorsStopped waits for all the actors in the actor system stopped(terminated or killed).
+func (system *ActorSystem) WaitForAllActorsStopped() {
 	system.shutdownMonitorForwarder()
 	system.wg.Wait()
 }
 
-func (system *ActorSystem) ShutdownNow() {
+// Shutdown the actor system.
+//
+// It sends kill signal(Kill() method) to all the actors in the actor system.
+func (system *ActorSystem) Shutdown() {
+	system.ShutdownIn(time.Duration(0))
+}
+
+// ShutdownIn shutdowns the actor system after waiting a given duration.
+//
+// It sends kill signal(Kill() method) to all the actors in the actor system after waiting for a given duration.
+func (system *ActorSystem) ShutdownIn(duration time.Duration){
+	<-time.After(duration)
 	system.topLevelActors.Subtract(system.stopped)
 	system.topLevelActors.Do(func (r interface{}) {
 		if actor, ok := r.(*Actor); ok {
@@ -79,7 +101,18 @@ func (system *ActorSystem) ShutdownNow() {
 	system.wg.Wait()
 }
 
+// GracefulShutdown shutdowns the actor system in graceful manner.
+//
+// It sends terminate signal(Terminate() method) to all the actors in the actor system.
 func (system *ActorSystem) GracefulShutdown() {
+	system.GracefulShutdownIn(time.Duration(0))
+}
+
+// GracefulShutdownIn shutdowns the actor system in graceful manner after waiting a given duration.
+//
+// It sends terminate signal(Terminate() method) to all the actors in the actor system after waiting for a given duration.
+func (system *ActorSystem) GracefulShutdownIn(duration time.Duration) {
+	<-time.After(duration)
 	system.topLevelActors.Subtract(system.stopped)
 	system.topLevelActors.Do(func (r interface{}) {
 		if actor, ok := r.(*Actor); ok {

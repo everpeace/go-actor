@@ -28,7 +28,6 @@ func main() {
 	fmt.Println("Sent [hello] to \"forward\"")
 	forward.Send(actor.Message{"hello"})
 
-	<-time.After(time.Duration(1) * time.Second)
-	system.GracefulShutdown()
+	system.GracefulShutdownIn(time.Duration(1) * time.Second)
 	fmt.Println("==========================================================")
 }

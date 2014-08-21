@@ -8,7 +8,9 @@ import (
 )
 
 // Actor Context
-// TODO actor hierarchy and supervision (this would introduce actor system)
+//
+// Actor Context will be passed to actor's message handler with message received.
+// This data enables message handler to access myself, to change its behavior.
 type ActorContext struct {
 	Parent           *ActorContext
 	Self             *Actor
@@ -32,6 +34,25 @@ type terminate struct{}
 type kill struct{}
 type shutdown struct{}
 
+// Become change actor's behavior.
+//
+// ActorContext can be accessed in message handler.
+// For example,
+//   echo := func(msg Message, context *ActorContext){
+//     fmt.Println(msg)
+//     context.Become(echoInUpper)
+//   }
+//   echoInUpper := func(msg Message, context *ActorContext){
+//     fmt.Println(msg)
+//     context.Unbecome()
+//   }
+//   alternate := system.Spawn(echo)
+// "alternate" actor behaves echo and echoInUpper alternately.
+// As you might notice, actor's behavior was stacked.  So, you can
+// unbecome to set back to the previous behavior.
+//
+// If discardOld flag is true, this doesn't push a given behavior to
+// its behavior stack but just overwrite the top of the stack.
 func (context *ActorContext) Become(behavior Receive, discardOld bool) {
 	if discardOld {
 		l := len(context.behaviorStack)
@@ -43,6 +64,9 @@ func (context *ActorContext) Become(behavior Receive, discardOld bool) {
 	context.currentBehavior = behavior
 }
 
+// Unbecome set its behavior to the previous behavior in its behavior stack.
+//
+// Please see Become for details.
 func (context *ActorContext) Unbecome() {
 	l := len(context.behaviorStack)
 	if l > 1 {

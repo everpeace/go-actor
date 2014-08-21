@@ -41,6 +41,6 @@ func main() {
 
 	<-time.After(time.Duration(1) * time.Second)
 	monitor.Terminate()
-	system.WaitForAllActorsTerminated()
+	system.WaitForAllActorsStopped()
 	fmt.Println("==========================================================")
 }
