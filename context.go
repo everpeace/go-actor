@@ -3,8 +3,6 @@ package actor
 import (
 	"runtime"
 	"time"
-
-	"github.com/dropbox/godropbox/container/set"
 )
 
 // Actor Context
@@ -13,9 +11,7 @@ import (
 // This data enables message handler to access myself(it's useful when you want
 // to send a message to myself), and to change its behavior.
 type ActorContext struct {
-	parent           *ActorContext
 	Self             *Actor
-	children         set.Set
 	monitor          *ForwardingActor
 	originalBehavior Receive
 	currentBehavior  Receive
@@ -24,7 +20,7 @@ type ActorContext struct {
 	killChan         chan kill
 	attachMonChan    chan *Actor
 	detachMonChan    chan *Actor
-	addChildChan     chan *ActorContext
+	addChildChan     chan *Actor
 	receiveTimeout   time.Duration
 	prePrecessHook   func()
 
@@ -79,12 +75,10 @@ func (context *ActorContext) Unbecome() {
 }
 
 // constructor
-func newActorContext(parent *ActorContext, self *Actor, receive Receive) *ActorContext {
+func newActorContext(self *Actor, receive Receive) *ActorContext {
 	// TODO make parameters configurable
 	context := &ActorContext{
-		parent:           parent,
 		Self:             self,
-		children:         set.NewSet(),
 		originalBehavior: receive,
 		currentBehavior:  receive,
 		behaviorStack:    []Receive{receive},
@@ -93,11 +87,8 @@ func newActorContext(parent *ActorContext, self *Actor, receive Receive) *ActorC
 		attachMonChan:  make(chan *Actor),
 		detachMonChan:  make(chan *Actor),
 		killChan:       make(chan kill),
-		addChildChan:   make(chan *ActorContext),
+		addChildChan:   make(chan *Actor),
 		receiveTimeout: time.Duration(10) * time.Millisecond,
-	}
-	if parent != nil {
-		parent.addChildChan <- context
 	}
 	return context
 }
@@ -160,9 +151,9 @@ func (context *ActorContext) loop() {
 				Cause: "killed",
 				Actor: context.Self,
 			}})
-			context.children.Do(func(c interface{}){
-				if child, ok:= c.(*ActorContext); ok {
-					child.kill()
+			context.Self.children.Do(func(c interface{}){
+				if child, ok:= c.(*Actor); ok {
+					child.context.kill()
 				}
 			})
 			return
@@ -174,7 +165,7 @@ func (context *ActorContext) loop() {
 		case mon := <-context.detachMonChan:
 			context.monitor.Remove(mon)
 		case child := <-context.addChildChan:
-			context.children.Add(child)
+			context.Self.children.Add(child)
 		default:
 			if context.prePrecessHook!= nil {
 				context.prePrecessHook()
@@ -198,9 +189,9 @@ func (context *ActorContext) processOneMessage() bool{
 					Cause: "terminated",
 					Actor: context.Self,
 				}})
-				context.children.Do(func(c interface{}){
-					if child, ok:= c.(*ActorContext); ok {
-						child.terminate()
+				context.Self.children.Do(func(c interface{}){
+					if child, ok:= c.(*Actor); ok {
+						child.context.terminate()
 					}
 				})
 				return true

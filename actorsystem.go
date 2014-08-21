@@ -3,11 +3,11 @@ package actor
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"strings"
 
 	"github.com/dropbox/godropbox/container/set"
-	"time"
 )
 
 // ActorSystem is an umbrella which maintains actor hierarchy.
@@ -42,16 +42,13 @@ func NewActorSystem(name string) *ActorSystem {
 //     fmt.Println(msg)
 //  })
 func (system *ActorSystem) Spawn(receive Receive) *Actor {
-	newName := system.canonicalName(fmt.Sprint(system.topLevelActors.Len()))
-	startLatch, actor := system.spawnActor(system.newTopLevelActor(newName, receive))
-	startLatch <- true
-	return actor
+	name := fmt.Sprint(system.topLevelActors.Len())
+	return system.SpawnWithName(name, receive)
 }
 
 // SpawnWithName is the same as Spawn except that you can name it.
 func (system *ActorSystem) SpawnWithName(name string, receive Receive) *Actor {
-	newName := system.canonicalName(name)
-	startLatch, actor := system.spawnActor(system.newTopLevelActor(newName, receive))
+	startLatch, actor := system.spawnActor(system.newTopLevelActor(name, receive))
 	startLatch <- true
 	return actor
 }
@@ -66,7 +63,7 @@ func (system *ActorSystem) SpawnForwardActor(name string, actors ...*Actor) *For
 		delRecipientChan: make(chan removeRecipient),
 		recipients: s,
 	}
-	forwardActor.Actor = system.newTopLevelActor(system.canonicalName(name), forwardActor.receive())
+	forwardActor.Actor = system.newTopLevelActor(name, forwardActor.receive())
 	forwardActor.context.prePrecessHook = forwardActor.preProcessHook()
 	start := forwardActor.context.start()
 	start <- true
@@ -131,16 +128,22 @@ func (system *ActorSystem) shutdownMonitorForwarder() {
 	})
 }
 func (system *ActorSystem) spawnMonitorForwarderFor(actor *Actor) *ForwardingActor {
-	name := strings.Replace(actor.Name, "/"+system.Name+"/", "", 1)
-	forwarder := system.SpawnForwardActor(name+"-MonitorForwarder")
+	name := strings.Replace(actor.CanonicalName(), system.Name+":/", "", 1)
+	name = strings.Replace(name, "/", "-", 1)
+	forwarder := system.SpawnForwardActor(name+"_MonitorForwarder")
 	system.topLevelActors.Remove(forwarder.Actor)
 	system.monitorForwarders.Add(forwarder)
 	return forwarder
 }
 
 func (system *ActorSystem) newTopLevelActor(name string, receive Receive) *Actor {
-	actor := &Actor{Name: name, System: system }
-	actor.context = newActorContext(nil, actor, receive)
+	actor := &Actor{
+		Name: name,
+		System: system,
+		parent: nil,
+		children: set.NewSet(),
+	}
+	actor.context = newActorContext(actor, receive)
 	system.topLevelActors.Add(actor)
 	return actor
 }
@@ -150,6 +153,6 @@ func (system *ActorSystem) spawnActor(actor *Actor) (chan bool, *Actor) {
 	return startLatch, actor
 }
 
-func (system *ActorSystem) canonicalName(name string) string {
-	return "/" + system.Name + "/" + name
-}
+//func (system *ActorSystem) canonicalName() string {
+//	return system.Name
+//}

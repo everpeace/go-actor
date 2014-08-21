@@ -11,9 +11,11 @@ import (
 //
 // An actor has its name and belongs to exactly one actor system.
 type Actor struct {
-	Name    string
-	System  *ActorSystem
-	context *ActorContext
+	Name     string
+	parent   *Actor
+	children set.Set
+	System   *ActorSystem
+	context  *ActorContext
 }
 
 // Send sends message to the actor asynchronously.
@@ -91,16 +93,13 @@ func (actor *Actor) IsRunning() bool {
 //  actor.Terminates()
 //  // then child will also terminate.
 func (actor *Actor) Spawn(receive Receive) *Actor {
-	system := actor.System
-	latch, child := system.spawnActor(actor.newActor(fmt.Sprint(actor.context.children.Len()), receive))
-	latch <- true
-	return child
+	return actor.SpawnWithName(fmt.Sprint(actor.children.Len()), receive)
 }
 
 // SpawnWithName is the same as Spawn except that you can name it.
 func (actor *Actor) SpawnWithName(name string, receive Receive) *Actor {
 	system := actor.System
-	latch, child := system.spawnActor(actor.newActor(name, receive))
+	latch, child := system.spawnActor(actor.newChildActor(name, receive))
 	latch <- true
 	return child
 }
@@ -115,21 +114,41 @@ func (actor *Actor) SpawnForwardActor(name string, actors ...*Actor) *Forwarding
 		delRecipientChan: make(chan removeRecipient),
 		recipients: s,
 	}
-	forwardActor.Actor = actor.newActor(name, forwardActor.receive())
+	forwardActor.Actor = actor.newChildActor(name, forwardActor.receive())
 	forwardActor.context.prePrecessHook = forwardActor.preProcessHook()
 	start := forwardActor.context.start()
 	start <- true
 	return forwardActor
 }
 
-func (actor *Actor) newActor(name string, receive Receive) *Actor {
-	child := &Actor{Name: actor.canonicalName(name), System: actor.System }
-	child.context = newActorContext(actor.context, child, receive)
+func (actor *Actor) newChildActor(name string, receive Receive) *Actor {
+	child := &Actor{
+		Name: name,
+		System: actor.System,
+		parent: actor,
+		children: set.NewSet(),
+	}
+	actor.context.addChildChan <- child
+	child.context = newActorContext(child, receive)
 	return child
 }
 
-func (actor *Actor) canonicalName(name string) string {
-	return actor.Name + "/" + name
+// CanonicalName returns a full path name of the actor which indicates
+// actor hierarchy from the actor system to which it belongs.
+//
+// Canonical name forms '<actor system name>:/<parent actor name>/<actor name>'
+// For example,
+//   actorSystem := actor.NewActorSystem("systemX")
+//   foo := actorSystem.Spawn("foo", ..Receive function..)
+//   bar := foo.Spawn("bar", ..Receive function..)
+//   foo.CanonicalName() // ==> "systemX:/foo"
+//   bar.CanonicalName() // ==> "systemX:/foo/bar"
+func (actor *Actor) CanonicalName() string {
+	if actor.parent == nil {
+		return actor.System.Name+":/"+actor.Name
+	} else {
+		return actor.parent.CanonicalName()+"/"+actor.Name
+	}
 }
 
 func logPanic(actor *Actor) {
