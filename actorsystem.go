@@ -15,6 +15,7 @@ type ActorSystem struct {
 	//TODO top level supervisor
 	Name              string
 	wg                sync.WaitGroup
+	guardian          *Actor
 	topLevelActors    *actorSet
 	monitorForwarders set.Set
 	running           set.Set
@@ -23,15 +24,32 @@ type ActorSystem struct {
 
 // NewActorSystem creates an ActorSystem instance.
 func NewActorSystem(name string) *ActorSystem {
-	return &ActorSystem{
+	actorSystem :=  &ActorSystem{
 		Name:              name,
 		topLevelActors:    newActorSet(set.NewSet()),
 		monitorForwarders: set.NewSet(),
 		running:           set.NewSet(),
 		stopped:           set.NewSet(),
 	}
+	actorSystem.guardian = newGuardian(actorSystem)
+	return actorSystem
 }
 
+// root guardian
+func newGuardian(system *ActorSystem) *Actor{
+	actor := &Actor{
+		Name: "ROOT_GUARDIAN",
+		System: system,
+		parent: nil,
+		children: newActorSet(set.NewSet()),
+	}
+	actor.context = newActorContext(actor, func(msg Message, context *ActorContext){
+		//nop
+	})
+	latch := actor.context.start()
+	latch <- true
+	return actor
+}
 
 // Spawn creates and starts an actor in the actor system.
 //
@@ -72,7 +90,7 @@ func (system *ActorSystem) SpawnForwardActor(name string, actors ...*Actor) *For
 
 // WaitForAllActorsStopped waits for all the actors in the actor system stopped(terminated or killed).
 func (system *ActorSystem) WaitForAllActorsStopped() {
-	system.shutdownMonitorForwarder()
+	system.internalShutdown()
 	system.wg.Wait()
 }
 
@@ -92,8 +110,7 @@ func (system *ActorSystem) ShutdownIn(duration time.Duration){
 	system.topLevelActors.Do(func (actor *Actor) {
 			actor.context.kill()
 	})
-	system.shutdownMonitorForwarder()
-	system.wg.Wait()
+	system.WaitForAllActorsStopped()
 }
 
 // GracefulShutdown shutdowns the actor system in graceful manner.
@@ -112,11 +129,15 @@ func (system *ActorSystem) GracefulShutdownIn(duration time.Duration) {
 	system.topLevelActors.Do(func (actor *Actor) {
 		actor.context.terminate()
 	})
-	system.shutdownMonitorForwarder()
-	system.wg.Wait()
+	system.WaitForAllActorsStopped()
 }
 
-func (system *ActorSystem) shutdownMonitorForwarder() {
+func (system *ActorSystem) internalShutdown(){
+	system.terminateMonitorForwarder()
+	system.guardian.Terminate()
+}
+
+func (system *ActorSystem) terminateMonitorForwarder() {
 	system.monitorForwarders.Do(func(r interface{}) {
 		if actor, ok := r.(*ForwardingActor); ok {
 			actor.context.terminate()
@@ -133,13 +154,7 @@ func (system *ActorSystem) spawnMonitorForwarderFor(actor *Actor) *ForwardingAct
 }
 
 func (system *ActorSystem) newTopLevelActor(name string, receive Receive) *Actor {
-	actor := &Actor{
-		Name: name,
-		System: system,
-		parent: nil,
-		children: newActorSet(set.NewSet()),
-	}
-	actor.context = newActorContext(actor, receive)
+	actor := system.guardian.newChildActor(name, receive)
 	system.topLevelActors.Add(actor)
 	return actor
 }

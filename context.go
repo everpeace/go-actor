@@ -110,8 +110,10 @@ func (context *ActorContext) start() chan bool {
 	context.Self.System.wg.Add(1)
 	go func() {
 		defer func() {
+			context.Self.System.running.Remove(context.Self)
 			context.Self.System.wg.Done()
 			context.closeAllChan()
+			context.Self.System.stopped.Add(context.Self)
 		}()
 		context.Self.System.running.Add(context.Self)
 		<-startLatch
@@ -152,7 +154,9 @@ func (context *ActorContext) loop() {
 				Actor: context.Self,
 			}})
 			context.Self.children.Do(func(child *Actor){
-				child.context.kill()
+				if child.IsRunning() {
+					child.context.kill()
+				}
 			})
 			return
 		case mon := <-context.attachMonChan:
@@ -188,7 +192,9 @@ func (context *ActorContext) processOneMessage() bool{
 					Actor: context.Self,
 				}})
 				context.Self.children.Do(func(child *Actor){
-					child.context.terminate()
+					if child.IsRunning() {
+						child.context.terminate()
+					}
 				})
 				return true
 			} else {

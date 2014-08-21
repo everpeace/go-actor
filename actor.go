@@ -36,8 +36,6 @@ func (actor *Actor) Send(msg Message) {
 // This method will just post "Message{PoisonPill{}}" to their mailbox.
 // Thus, the actor will stop after processing remained messages in their mailbox.
 func (actor *Actor) Terminate() {
-	actor.System.running.Remove(actor)
-	actor.System.stopped.Add(actor)
 	go func() {
 		defer logPanic(actor)
 		actor.context.terminate()
@@ -49,8 +47,6 @@ func (actor *Actor) Terminate() {
 // If the actor receives the signal, the actor stops immediately.
 // However, the timing of receipt of the signal depends on goroutine scheduler.  Therefore, the number of messages will be processed before its stop is undefined.
 func (actor *Actor) Kill() {
-	actor.System.running.Remove(actor)
-	actor.System.stopped.Add(actor)
 	go func() {
 		defer logPanic(actor)
 		actor.context.kill()
@@ -155,7 +151,7 @@ func (actor *Actor) CanonicalName() string {
 //   foo.ActorPath() // ===> /foo
 //   bar.ActorPath() // ==> "/foo/bar"
 func (actor *Actor) ActorPath() string {
-	if actor.parent == nil {
+	if actor.isTopLevel() {
 		return "/"+actor.Name
 	} else {
 		return actor.parent.ActorPath()+"/"+actor.Name
@@ -166,4 +162,8 @@ func logPanic(actor *Actor) {
 	if r := recover(); r != nil {
 		fmt.Fprintf(os.Stderr, "[%s] %s", actor.Name, r)
 	}
+}
+
+func (actor *Actor) isTopLevel() bool{
+	return actor.parent == actor.System.guardian
 }
