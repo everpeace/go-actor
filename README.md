@@ -5,9 +5,14 @@ This is far far incomplete actor implementation in golang. This is only for my g
 
 go-actor now supports:
 * become/unbecome
-* actor hierarchy (actor has children. but supervisor is comming soon.)
+* actor hierarchy (actor has children. parent termination propagates to children, but supervisor is comming soon.)
+* monitor (monitor receives its target actor's termination.)
 * forwarding actor (this actor forwards all messages other actors.)
 
+## GoDoc
+GoDoc is [here](https://godoc.org/github.com/everpeace/go-actor)
+
+## How to Try
 If you tried to run this, please just hit.
 
 ```
