@@ -74,6 +74,22 @@ func (context *ActorContext) Unbecome() {
 	}
 }
 
+// Watch method attaches myself to given actor as monitor.
+//
+// This is equivalent with
+//   actor.Monitor(context.Self)
+func (context *ActorContext) Watch(actor *Actor){
+	actor.Monitor(context.Self)
+}
+
+// Unwatch method detaches myself as monitor from given actor.
+//
+// This is equivalent with
+//   actor.Demonitor(context.Self)
+func (context *ActorContext) Unwatch(actor* Actor){
+	actor.Demonitor(context.Self)
+}
+
 // constructor
 func newActorContext(self *Actor, receive Receive) *ActorContext {
 	// TODO make parameters configurable
